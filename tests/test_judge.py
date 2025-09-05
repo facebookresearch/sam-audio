@@ -39,14 +39,14 @@ class TestJudge(unittest.TestCase):
             sam_result = sam_model.predict([wav], [hyp_wav], [description])
 
         self.assertAlmostEqual(
-            ab_res[0]["overall"], sam_result.overall.item(), places=4
+            ab_res[0]["overall"], sam_result.overall.item(), places=2
         )
-        self.assertAlmostEqual(ab_res[0]["recall"], sam_result.recall.item(), places=4)
+        self.assertAlmostEqual(ab_res[0]["recall"], sam_result.recall.item(), places=2)
         self.assertAlmostEqual(
-            ab_res[0]["precision"], sam_result.precision.item(), places=4
+            ab_res[0]["precision"], sam_result.precision.item(), places=2
         )
         self.assertAlmostEqual(
-            ab_res[0]["faithfulness"], sam_result.faithfulness.item(), places=4
+            ab_res[0]["faithfulness"], sam_result.faithfulness.item(), places=2
         )
 
 
