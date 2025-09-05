@@ -7,8 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
-from segment_anything_audio.model.patcher import Patcher
-from segment_anything_audio.model.rope import RotaryEmbedding
+from sam_audio.model.patcher import Patcher
+from sam_audio.model.rope import RotaryEmbedding
 
 
 def gate(x, gate):

@@ -5,7 +5,7 @@ import torch
 import torchaudio
 from audiobox.e2e.use_case.audio_editing import Separation
 
-from segment_anything_audio.inputs import prepare_inputs
+from sam_audio.inputs import prepare_inputs
 from tests.models import get_model
 
 

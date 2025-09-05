@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from dac.model import dac
 
-from segment_anything_audio.model.config import DACVAEConfig
+from sam_audio.model.config import DACVAEConfig
 
 
 class Codec(torch.nn.Module, metaclass=ABCMeta):

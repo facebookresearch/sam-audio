@@ -48,7 +48,7 @@ def get_model(name):
         MODELS[name] = model
         return model
     elif name == "sam":
-        from segment_anything_audio.model.model import SAMAudio
+        from sam_audio.model.model import SAMAudio
 
         model = SAMAudio.from_config(
             "base",
@@ -73,7 +73,7 @@ def get_model(name):
         replace_flash_attn(model.model)
         return model
     elif name == "sam-judge":
-        from segment_anything_audio.model.judge import Judge
+        from sam_audio.model.judge import Judge
 
         checkpoint_path = "/home/mattle/checkpoints/separation/samjudge/v2/runs/peaudio_300hrs_base_regression_joint_posttrain/runs/2025-08-14-13-48-43/oss.pth"
         checkpoint_path = "/home/mattle/checkpoints/separation/samjudge/v2/runs/peaudio_300hrs_base_regression_joint_posttrain_v6/runs/2025-08-29-02-11-21/oss.pth"

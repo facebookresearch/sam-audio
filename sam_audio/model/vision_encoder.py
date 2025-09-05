@@ -3,7 +3,7 @@ import torchvision
 from open_clip import create_model_and_transforms
 from torch.nn.utils.rnn import pad_sequence
 
-from segment_anything_audio.model.config import VisionEncoderConfig
+from sam_audio.model.config import VisionEncoderConfig
 
 
 class RescaleTransform(object):

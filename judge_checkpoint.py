@@ -5,7 +5,7 @@ import re
 import torch
 from dac.model import dac
 
-from segment_anything_audio.model.judge import Judge
+from sam_audio.model.judge import Judge
 from tests.models import get_model
 
 

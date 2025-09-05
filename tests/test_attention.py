@@ -8,7 +8,7 @@ from audiobox.models.transformer_layers.modules.inner_attention.flash_attention2
 )
 from audiobox.models.xpos_relative_position import CachedXposWithCustomKernel
 
-from segment_anything_audio.model.rope import RotaryEmbedding
+from sam_audio.model.rope import RotaryEmbedding
 
 
 class TestAttention(unittest.TestCase):

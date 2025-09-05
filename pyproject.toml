@@ -1,5 +1,5 @@
 [project]
-name = "segment_anything_audio"
+name = "sam_audio"
 version = "0.1.0"
 description = "Segment Anything Audio"
 authors = [

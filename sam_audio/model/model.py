@@ -5,14 +5,14 @@ from typing import Any, Dict, Optional
 import torch
 from torchdiffeq import odeint
 
-from segment_anything_audio.inputs import Anchor, prepare_inputs
-from segment_anything_audio.model.align import AlignModalities
-from segment_anything_audio.model.base import BaseModel
-from segment_anything_audio.model.codec import DACVAE
-from segment_anything_audio.model.config import SAM_AUDIO_CONFIGS, SAMAudioConfig
-from segment_anything_audio.model.text_encoder import T5TextEncoder
-from segment_anything_audio.model.transformer import DiT
-from segment_anything_audio.model.vision_encoder import MetaCLIPEncoder
+from sam_audio.inputs import Anchor, prepare_inputs
+from sam_audio.model.align import AlignModalities
+from sam_audio.model.base import BaseModel
+from sam_audio.model.codec import DACVAE
+from sam_audio.model.config import SAM_AUDIO_CONFIGS, SAMAudioConfig
+from sam_audio.model.text_encoder import T5TextEncoder
+from sam_audio.model.transformer import DiT
+from sam_audio.model.vision_encoder import MetaCLIPEncoder
 
 DFLT_ODE_OPT = {"method": "midpoint", "options": {"step_size": 1 / 32}}
 

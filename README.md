@@ -13,7 +13,7 @@ pip install .
 ## Usage
 
 ```python
-from segment_anything_audio.model import SAMAudio
+from sam_audio.model import SAMAudio
 import torchaudio
 
 model = SAMAudio.from_config(

@@ -3,7 +3,7 @@ from typing import Tuple
 import torch
 import transformers
 
-from segment_anything_audio.model.config import ModernBERTConfig, T5EncoderConfig
+from sam_audio.model.config import ModernBERTConfig, T5EncoderConfig
 
 
 class T5TextEncoder(torch.nn.Module):

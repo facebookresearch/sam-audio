@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-from segment_anything_audio.model.rope import RotaryEmbedding
+from sam_audio.model.rope import RotaryEmbedding
 
 
 class TestRope(unittest.TestCase):

@@ -3,13 +3,13 @@ from typing import Optional
 
 import torch
 
-from segment_anything_audio.inputs import batch_audio
-from segment_anything_audio.model.align import AlignModalities
-from segment_anything_audio.model.base import BaseModel
-from segment_anything_audio.model.codec import DACVAE
-from segment_anything_audio.model.config import JUDGE_CONFIGS, JudgeConfig
-from segment_anything_audio.model.text_encoder import ModernBERTEncoder
-from segment_anything_audio.model.transformer import Transformer
+from sam_audio.inputs import batch_audio
+from sam_audio.model.align import AlignModalities
+from sam_audio.model.base import BaseModel
+from sam_audio.model.codec import DACVAE
+from sam_audio.model.config import JUDGE_CONFIGS, JudgeConfig
+from sam_audio.model.text_encoder import ModernBERTEncoder
+from sam_audio.model.transformer import Transformer
 
 
 class MeanPool(torch.nn.Module):
