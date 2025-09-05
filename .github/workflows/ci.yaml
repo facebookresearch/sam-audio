@@ -1,0 +1,44 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+env:
+  CACHE_NUMBER: 0
+
+jobs:
+  build:
+    runs-on: 32-core-ubuntu
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mamba-org/setup-micromamba@v1.8.1
+        with:
+          environment-name: sam-audio
+          init-shell: bash
+          create-args: >-
+            python=3.10
+            pip=24.2
+            ruff==
+
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/micromamba/envs/sam-audio
+          key: ${{ hashFiles('pyproject.toml') }}-${{ env.CACHE_NUMBER }}
+        id: cache
+
+      - name: Update environment
+        shell: bash -l {0}
+        run: |
+          pip install .
+        if: steps.cache.outputs.cache-hit != 'true'
+
+      - name: Check formatting
+        shell: bash -l {0}
+        run: |
+          ruff format --check .
+
+      - name: Lint
+        shell: bash -l {0}
+        run: |
+          ruff check .

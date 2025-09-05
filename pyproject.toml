@@ -1,0 +1,44 @@
+[project]
+name = "segment_anything_audio"
+version = "0.1.0"
+description = "Segment Anything Audio"
+authors = [
+    { name="Matt Le", email="mattle@meta.com" }
+]
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.8"
+dependencies = [
+    "decord",
+    "einops",
+    "numpy",
+    "open_clip_torch",
+    "torch",
+    "torchaudio",
+    "torchdiffeq",
+    "torchvision",
+    "transformers>=4.48.0",
+]
+
+[tool.ruff]
+
+lint.select=[
+    "B",
+    "C",
+    "E",
+    "W",
+    "F",  # pyflakes
+    "I",  # isort
+]
+lint.ignore = [
+    "E501",
+    "E731",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/your_project_name"
+Repository = "https://github.com/yourusername/your_project_name"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
