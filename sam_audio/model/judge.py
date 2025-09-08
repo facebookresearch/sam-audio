@@ -3,7 +3,7 @@ from typing import Optional
 
 import torch
 
-from sam_audio.inputs import batch_audio
+from sam_audio.inputs import batch_audio, mask_from_sizes
 from sam_audio.model.align import AlignModalities
 from sam_audio.model.base import BaseModel
 from sam_audio.model.codec import DACVAE
@@ -69,19 +69,24 @@ class Judge(BaseModel):
             self.text_encoder([x.lower().strip() for x in descriptions])
         )
         device = text_features.device
-        hyp_wavs, _ = batch_audio(hyp_wavs)
-        input_wavs, _ = batch_audio(input_wavs)
+        hyp_wavs, hyp_sizes = batch_audio(hyp_wavs)
+        input_wavs, input_sizes = batch_audio(input_wavs)
 
-        # TODO: handle batching variable length sequences
-        mask = None
+        assert (hyp_sizes == input_sizes).all().item(), (
+            "Input and separated audio must be the same size"
+        )
 
-        assert hyp_wavs.shape == input_wavs.shape
+        mask = mask_from_sizes(self.audio_codec.wav_idx_to_feature_idx(hyp_sizes))
+        if mask is not None:
+            mask = mask.to(device)
 
-        input_codec_feats, hyp_codec_feats = self.audio_codec(
-            torch.cat([input_wavs, hyp_wavs], dim=0).to(device)
-        ).transpose(1, 2)
-        input_features, _ = self.audio_encoder(input_codec_feats[None])
-        hyp_features, _ = self.audio_encoder(hyp_codec_feats[None])
+        input_codec_feats, hyp_codec_feats = (
+            self.audio_codec(torch.cat([input_wavs, hyp_wavs], dim=0).to(device))
+            .transpose(1, 2)
+            .chunk(2, 0)
+        )
+        input_features, _ = self.audio_encoder(input_codec_feats, padding_mask=mask)
+        hyp_features, _ = self.audio_encoder(hyp_codec_feats, padding_mask=mask)
         audio_features = self.cat_audio_proj(
             torch.cat([input_features, hyp_features], dim=2)
         )
@@ -89,7 +94,7 @@ class Judge(BaseModel):
         finetune_inp = self.cat_aligned(
             torch.cat([audio_features, aligned.expand_as(audio_features)], dim=2)
         )
-        final_features, _ = self.finetune_encoder(finetune_inp)
+        final_features, _ = self.finetune_encoder(finetune_inp, padding_mask=mask)
         result = self.pool(self.head(final_features), mask)[:, :4]
         de_normalized = result * self.std + self.mean
         return JudgeOutput(*de_normalized.chunk(4, dim=1))

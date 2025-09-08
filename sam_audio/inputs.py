@@ -20,9 +20,9 @@ def batch_audio(
                 wav = torchaudio.functional.resample(wav, sr, audio_sampling_rate)
         else:
             wav = audio
-        wavs.append(wav.mean(0, keepdim=True))
+        wavs.append(wav.mean(0))
     sizes = torch.tensor([wav.size(-1) for wav in wavs])
-    return pad_sequence(wavs, batch_first=True), sizes
+    return pad_sequence(wavs, batch_first=True).unsqueeze(1), sizes
 
 
 @dataclass(kw_only=True)
@@ -54,6 +54,10 @@ class Batch:
         return self
 
 
+def mask_from_sizes(sizes: torch.Tensor) -> torch.Tensor:
+    return torch.arange(sizes.max()).expand(len(sizes), -1) < sizes.unsqueeze(1)
+
+
 Anchor = Tuple[str, float, float]
 
 
@@ -74,11 +78,9 @@ def prepare_inputs(
     anchor_dict = {"<null>": 0, "+": 1, "-": 2, "<pad>": 3}
 
     audios, wav_sizes = batch_audio(audio_paths, audio_sampling_rate)
-    sizes = wav_to_feature_idx(wav_sizes)
 
-    audio_pad_mask = torch.arange(sizes.max()).expand(len(sizes), -1) < sizes.unsqueeze(
-        1
-    )
+    sizes = wav_to_feature_idx(wav_sizes)
+    audio_pad_mask = mask_from_sizes(sizes)
     audio_feature_mask = torch.zeros_like(audio_pad_mask)
     if anchors is None:
         anchor_ids = torch.full(

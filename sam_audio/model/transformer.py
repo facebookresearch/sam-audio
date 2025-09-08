@@ -145,7 +145,6 @@ class Attention(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        padding_mask: Optional[torch.Tensor],
         cross_x: Optional[torch.Tensor] = None,
         key_padding_mask: Optional[torch.Tensor] = None,
         rope: Optional[RotaryEmbedding] = None,
@@ -164,29 +163,17 @@ class Attention(nn.Module):
             xq = self.q_norm(xq)
             xk = self.k_norm(xk)
 
-        # breakpoint()
-
         if rope is not None:
             xq = rope(xq, bhle=True)
             xk = rope(xk, bhle=True)
 
         attn_mask = None
-        # Construct the attn_mask.  True corresponds to valid positions
-        if padding_mask is not None:
-            attn_mask = padding_mask[:, None, :, None]
 
         if key_padding_mask is not None:
-            if attn_mask is None:
-                attn_mask = key_padding_mask[:, None, None, :]
-            else:
-                attn_mask = attn_mask & key_padding_mask[:, None, None, :]
+            attn_mask = key_padding_mask[:, None, None, :]
 
-        output = F.scaled_dot_product_attention(
-            xq,
-            xk,
-            xv,
-            attn_mask=attn_mask,
-        )
+        output = F.scaled_dot_product_attention(xq, xk, xv, attn_mask=attn_mask)
+
         output = rearrange(output, "b h n d -> b n (h d)")
         return self.wo(output)
 
@@ -388,7 +375,7 @@ class TransformerBlock(torch.nn.Module):
         assert self.attention is not None and self.attention_norm is not None
         h_attn = self.attention(
             self.attention_norm(x),
-            padding_mask=padding_mask,
+            key_padding_mask=padding_mask,
             rope=rope,
         )
 
@@ -397,7 +384,6 @@ class TransformerBlock(torch.nn.Module):
         if self.cross_attention is not None:
             h_cross = self.cross_attention(
                 x=h,
-                padding_mask=padding_mask,
                 cross_x=cross_x,
                 key_padding_mask=memory_padding_mask,
             )
@@ -436,7 +422,7 @@ class DiTBlock(TransformerBlock):
         assert self.attention is not None and self.attention_norm is not None
         h_attn = self.attention(
             modulate(self.attention_norm(x), shift_msa, scale_msa),
-            padding_mask=padding_mask,
+            key_padding_mask=padding_mask,
             rope=rope,
         )
 
@@ -445,7 +431,6 @@ class DiTBlock(TransformerBlock):
         if self.cross_attention is not None:
             h_cross = self.cross_attention(
                 x=h,
-                padding_mask=padding_mask,
                 cross_x=cross_x,
                 key_padding_mask=memory_padding_mask,
             )

@@ -64,7 +64,7 @@ def get_model(name):
         checkpoint_path = "/home/mattle/checkpoints/separation/samjudge/v2/runs/peaudio_300hrs_base_regression_joint_posttrain/runs/2025-08-14-13-48-43/epoch-000_step-100000.ckpt"
         checkpoint_path = "/home/mattle/checkpoints/separation/samjudge/v2/runs/peaudio_300hrs_base_regression_joint_posttrain_v6/runs/2025-08-29-02-11-21/epoch-000_step-100000.ckpt"
         model = E2ESAMAudioJudge(
-            batch_size=1,
+            batch_size=4,
             checkpoint_path=checkpoint_path,
             dacvae_repository="/home/mattle/checkpoints/dacvae/vae_large_scale_pretrain_v2_48000_hop1920_ld128/100k/dacvae",
             num_workers=0,
