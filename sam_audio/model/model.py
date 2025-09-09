@@ -1,5 +1,5 @@
 import math
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, Optional
 
 import torch
@@ -58,6 +58,12 @@ class EmbedAnchors(torch.nn.Module):
         embs = self.embed(anchor_ids.gather(1, anchor_alignment))
         proj = self.proj(embs)
         return x + self.gate.tanh() * proj
+
+
+@dataclass
+class SeparationResult:
+    target: torch.Tensor
+    residual: torch.Tensor
 
 
 class SAMAudio(BaseModel):
@@ -168,7 +174,7 @@ class SAMAudio(BaseModel):
         video_mask_paths: Optional[list[str]] = None,
         anchors: Optional[list[list[Anchor]]] = None,
         ode_opt: Dict[str, Any] = DFLT_ODE_OPT,
-    ):
+    ) -> SeparationResult:
         assert len(audio_paths) == len(descriptions)
         batch = prepare_inputs(
             descriptions=descriptions,
@@ -223,8 +229,13 @@ class SAMAudio(BaseModel):
         )[-1].transpose(1, 2)
 
         # generated_features has shape [B, 2C, T].  Reshape to stack along the batch dimension
-        wavs = self.audio_codec.decode(generated_features.view(2 * B, C, T))
-        return wavs.view(B, 2, -1)[:, [0]]
+        wavs = self.audio_codec.decode(generated_features.view(2 * B, C, T)).view(
+            B, 2, -1
+        )
+        return SeparationResult(
+            target=wavs[:, [0]],
+            residual=wavs[:, [1]],
+        )
 
     @classmethod
     def get_configs(cls):

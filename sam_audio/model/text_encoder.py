@@ -41,6 +41,7 @@ class ModernBERTEncoder(torch.nn.Module):
         self.cfg = cfg
         self.model = transformers.ModernBertModel.from_pretrained(cfg.model_id)
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(cfg.model_id)
+        self.nth_layer = cfg.nth_layer
 
     def forward(self, texts: list[str]):
         device = next(self.model.parameters()).device
@@ -58,4 +59,8 @@ class ModernBERTEncoder(torch.nn.Module):
         output = self.model(
             input_ids, attention_mask=attention_mask, output_hidden_states=True
         )
-        return output.hidden_states[self.cfg.nth_layer][:, 0]
+        if self.nth_layer is None:
+            # Note that `hidden_state[-1]` is not necessarily equivalent to `last_hidden_state`
+            # https://huggingface.co/docs/transformers/en/main_classes/output#model-outputs
+            return output.last_hidden_state[:, 0]
+        return output.hidden_states[self.nth_layer][:, 0]

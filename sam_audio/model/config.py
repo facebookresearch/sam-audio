@@ -66,6 +66,13 @@ class TransformerConfig:
     no_cross_attention: bool = False
 
 
+@dataclass
+class ImageBindReRanker:
+    checkpoint: Optional[str] = (
+        None  # Optional local checkpoint, otherwise download from internet
+    )
+
+
 @dataclass(kw_only=True)
 class SAMAudioConfig:
     in_channels: int = 768
@@ -76,6 +83,7 @@ class SAMAudioConfig:
     video_feature_dim: int = 1024  # metaclip dim
     num_anchors: int = 3
     anchor_embedding_dim: int = 128
+    imagebind_config: ImageBindReRanker = field(default_factory=ImageBindReRanker)
 
 
 @dataclass
@@ -84,7 +92,7 @@ class ModernBERTConfig:
     pad_mode: str = "longest"
     max_length: int = 512
     dim: int = 1024
-    nth_layer: int = 22
+    nth_layer: Optional[int] = 22
 
 
 @dataclass(kw_only=True)

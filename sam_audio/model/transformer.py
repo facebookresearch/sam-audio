@@ -113,9 +113,6 @@ class Attention(nn.Module):
         self.n_kv_heads = n_kv_heads
         self.use_qk_norm = use_qk_norm
 
-        # local heads
-        assert self.n_heads % self.n_kv_heads == 0
-
         self.wq = torch.nn.Linear(dim, n_heads * head_dim, bias=fc_bias)
         self.wk, self.wv = [
             torch.nn.Linear(
@@ -368,8 +365,8 @@ class TransformerBlock(torch.nn.Module):
         self,
         x: torch.Tensor,
         cross_x: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,  # y_mask
-        memory_padding_mask: Optional[torch.Tensor] = None,  # y_mask
+        padding_mask: Optional[torch.Tensor] = None,
+        memory_padding_mask: Optional[torch.Tensor] = None,
         rope: Optional[RotaryEmbedding] = None,
     ):
         assert self.attention is not None and self.attention_norm is not None
@@ -405,8 +402,8 @@ class DiTBlock(TransformerBlock):
         x: torch.Tensor,
         cross_x: Optional[torch.Tensor],
         t: torch.Tensor,
-        padding_mask: Optional[torch.Tensor],  # y_mask
-        memory_padding_mask: Optional[torch.Tensor],  # y_mask
+        padding_mask: Optional[torch.Tensor],
+        memory_padding_mask: Optional[torch.Tensor],
         rope: Optional[RotaryEmbedding] = None,
     ):
         biases = self.scale_shift_table[None] + t.reshape(x.size(0), 6, -1)

@@ -25,18 +25,18 @@ class AlignModalities(torch.nn.Module):
 
         self.out_channels = out_channels
 
-    def forward(self, x: torch.Tensor, video_features: Optional[torch.Tensor] = None):
+    def forward(self, anchor: torch.Tensor, tgt: Optional[torch.Tensor] = None):
         """
         Align video features to the input audio features
 
         Args:
-            x (torch.Tensor): Input tensor of shape (B, T, C), where B is batch size, C is channel size, and T is sequence length.
-            video_features (Optional[torch.Tensor]): Optional video features tensor to be aligned, expected shape (B, in_channels, T).
+            anchor (torch.Tensor): Input anchor tensor of shape (B, T, C), where B is batch size, C is channel size, and T is sequence length.
+            tgt (Optional[torch.Tensor]): Optional features tensor to be aligned to anchor, expected shape (B, in_channels, T).
         """
-        if video_features is None:
-            return x
+        if tgt is None:
+            return anchor
 
-        post_conv = self.conv(video_features)
+        post_conv = self.conv(tgt)
         post_conv = post_conv.permute(0, 2, 1)  # BCT -> BTC
 
         if self.normalize:
@@ -45,4 +45,4 @@ class AlignModalities(torch.nn.Module):
         if self.gate is None:
             return post_conv
         else:
-            return x + self.gate.tanh() * post_conv
+            return anchor + self.gate.tanh() * post_conv
