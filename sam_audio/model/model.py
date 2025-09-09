@@ -1,11 +1,12 @@
 import math
 from dataclasses import asdict, dataclass
+from functools import partial
 from typing import Any, Dict, Optional
 
 import torch
 from torchdiffeq import odeint
 
-from sam_audio.inputs import Anchor, prepare_inputs
+from sam_audio.inputs import Batch, prepare_inputs
 from sam_audio.model.align import AlignModalities
 from sam_audio.model.base import BaseModel
 from sam_audio.model.codec import DACVAE
@@ -14,7 +15,7 @@ from sam_audio.model.text_encoder import T5TextEncoder
 from sam_audio.model.transformer import DiT
 from sam_audio.model.vision_encoder import MetaCLIPEncoder
 
-DFLT_ODE_OPT = {"method": "midpoint", "options": {"step_size": 1 / 32}}
+DFLT_ODE_OPT = {"method": "midpoint", "options": {"step_size": 2 / 32}}
 
 
 class SinusoidalEmbedding(torch.nn.Module):
@@ -64,6 +65,7 @@ class EmbedAnchors(torch.nn.Module):
 class SeparationResult:
     target: torch.Tensor
     residual: torch.Tensor
+    noise: torch.Tensor
 
 
 class SAMAudio(BaseModel):
@@ -165,32 +167,19 @@ class SAMAudio(BaseModel):
             memory_padding_mask=text_mask,
         )
 
-    @torch.inference_mode()
-    def separate(
-        self,
-        audio_paths: list[str],
-        descriptions: list[str],
-        video_paths: Optional[list[str]] = None,
-        video_mask_paths: Optional[list[str]] = None,
-        anchors: Optional[list[list[Anchor]]] = None,
-        ode_opt: Dict[str, Any] = DFLT_ODE_OPT,
-    ) -> SeparationResult:
-        assert len(audio_paths) == len(descriptions)
-        batch = prepare_inputs(
-            descriptions=descriptions,
-            audio_paths=audio_paths,
-            wav_to_feature_idx=self.audio_codec.wav_idx_to_feature_idx,
-            anchors=anchors,
-            video_paths=video_paths,
-            video_mask_paths=video_mask_paths,
+    def get_transform(self):
+        return partial(
+            prepare_inputs, wav_to_feature_idx=self.audio_codec.wav_idx_to_feature_idx
         )
-        batch = batch.to(self.device())
 
-        # Encode audio
-        audio_features = self.audio_codec(batch.audios).transpose(1, 2)
-        B, T, C = audio_features.shape
+    def _get_audio_features(self, audios: torch.Tensor):
+        audio_features = self.audio_codec(audios).transpose(1, 2)
+        return torch.cat([audio_features, audio_features], dim=2)
 
-        audio_features = torch.cat([audio_features, audio_features], dim=2)
+    def _get_forward_args(self, batch: Batch):
+        audio_features = self._get_audio_features(batch.audios)
+        B, T, _ = audio_features.shape
+
         text_features, text_mask = self.text_encoder(batch.descriptions)
 
         if batch.video is None:
@@ -205,26 +194,45 @@ class SAMAudio(BaseModel):
         else:
             video_mask_features = self.vision_encoder(batch.video_mask)
 
-        noise = torch.randn_like(audio_features)
+        return {
+            "audio_features": audio_features,
+            "text_features": text_features,
+            "text_mask": text_mask,
+            "video_features": video_features,
+            "video_mask_features": video_mask_features,
+            "anchor_ids": batch.anchor_ids,
+            "anchor_alignment": batch.anchor_alignment,
+            "audio_pad_mask": batch.audio_pad_mask,
+        }
+
+    @torch.inference_mode()
+    def separate(
+        self,
+        batch: Batch,
+        noise: Optional[torch.Tensor] = None,
+        ode_opt: Dict[str, Any] = DFLT_ODE_OPT,
+    ) -> SeparationResult:
+        # Encode audio
+        forward_args = self._get_forward_args(batch)
+        audio_features = forward_args["audio_features"]
+        B, T, C = audio_features.shape
+        C = C // 2  # we stack audio_features, so the actual channels is half
+
+        if noise is None:
+            noise = torch.randn_like(audio_features)
 
         def vector_field(t, noisy_audio):
-            return self.forward(
+            res = self.forward(
                 noisy_audio=noisy_audio,
-                audio_features=audio_features,
-                text_features=text_features,
-                text_mask=text_mask,
-                video_features=video_features,
-                video_mask_features=video_mask_features,
-                anchor_ids=batch.anchor_ids,
-                anchor_alignment=batch.anchor_alignment,
-                audio_pad_mask=batch.audio_pad_mask,
                 time=t.expand(noisy_audio.size(0)),
+                **forward_args,
             )
+            return res
 
         generated_features = odeint(
             vector_field,
             noise,
-            torch.tensor([0.0, 1.0], device=audio_features.device),
+            torch.tensor([0.0, 1.0], device=noise.device),
             **ode_opt,
         )[-1].transpose(1, 2)
 
@@ -235,6 +243,7 @@ class SAMAudio(BaseModel):
         return SeparationResult(
             target=wavs[:, [0]],
             residual=wavs[:, [1]],
+            noise=noise,
         )
 
     @classmethod

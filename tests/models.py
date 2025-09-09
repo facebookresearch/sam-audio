@@ -1,3 +1,6 @@
+from contextlib import contextmanager
+from unittest import mock
+
 import torch
 from audiobox.models.transformer_layers.modules.inner_attention.flash_attention2 import (
     FlashAttentionSDPA,
@@ -8,6 +11,17 @@ from audiobox.models.transformer_layers.modules.inner_attention.scaled_dot_produ
 )
 
 MODELS = {}
+
+
+@contextmanager
+def deterministic_randn_liked(mock_path, original_method):
+    def side_effect(self, *args, **kwargs):
+        torch.manual_seed(0)
+        return original_method(self, *args, **kwargs)
+
+    patcher = mock.patch(mock_path, autospec=True, side_effect=side_effect)
+    yield patcher.start()
+    patcher.stop()
 
 
 def replace_flash_attn(module):
@@ -44,7 +58,9 @@ def get_model(name):
             precision="bf16",
             vocoder_checkpoint="/home/mattle/checkpoints/dacvae/vae_large_scale_pretrain_v2_48000_hop1920_ld128/100k/dacvae/weights.pth",
             max_positions=10_000,
+            guidance_weight=None,
         )
+        replace_flash_attn(model.method)
         MODELS[name] = model
         return model
     elif name == "sam":
