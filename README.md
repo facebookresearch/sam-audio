@@ -24,10 +24,14 @@ model = model.eval().cuda()
 file = ... # audio file
 description = "Raindrops are falling heavily, splashing on the ground."
 
-result_wav = model.separate(
+transform = model.get_transform()
+batch = transform(
     audio_paths=[file],
     descriptions=[description],
-)
+).to("cuda)
 
-torchaudio.save("result.wav", result_wav[0].cpu(), 48_000)
+result = model.separate(batch)
+
+torchaudio.save("target.wav", result.target.cpu(), 48_000)
+torchaudio.save("residual.wav", result.residual.cpu(), 48_000)
 ```
