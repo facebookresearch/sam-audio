@@ -17,7 +17,7 @@ dependencies = [
     "torchaudio",
     "torchdiffeq",
     "torchvision",
-    "transformers>=4.48.0",
+    "transformers>=4.54.0",
     "perception-models@git+https://github.com/facebookresearch/perception_models",
     "imagebind@git+https://github.com/facebookresearch/ImageBind.git",
 ]
