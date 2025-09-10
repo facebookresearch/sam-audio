@@ -8,7 +8,7 @@ from audiobox.e2e.use_case.audio_editing import Separation
 
 from sam_audio.inputs import batch_audio
 from sam_audio.model.model import DFLT_ODE_OPT
-from tests.models import deterministic_randn_liked, get_model
+from tests.models import get_model
 
 
 class TestAlignInputs(unittest.TestCase):
@@ -120,7 +120,6 @@ class TestAlignInputs(unittest.TestCase):
         self.assertAlmostEqual(diff.max().item(), 0, places=3)
         self.assertGreater(corr.min().item(), 0.99)
 
-    @deterministic_randn_liked("torch.randn_like", torch.randn_like)
     def test_text_based_separation_e2e(self):
         torch.manual_seed(0)
         file = os.path.join(
@@ -150,6 +149,7 @@ class TestAlignInputs(unittest.TestCase):
                 self.model.method, noise, extra=ab_batch, ode_opts=DFLT_ODE_OPT
             )
 
+        # Note that we patch _get_audio_features to cope with randomness from dacvae
         with torch.no_grad(), patch.object(
             self.sam,
             "_get_audio_features",
@@ -158,9 +158,8 @@ class TestAlignInputs(unittest.TestCase):
             sam_res = self.sam.separate(batch, noise=noise.transpose(1, 2))
 
         self.check_wav(sam_res.target[0], ab_res["wav"][0])
-        self.check_wav(sam_res.tarresidualget[0], ab_res["rest_wav"][0])
+        self.check_wav(sam_res.residual[0], ab_res["rest_wav"][0])
 
-    @deterministic_randn_liked("torch.randn_like", torch.randn_like)
     def test_text_based_separation_w_anchors_e2e(self):
         torch.manual_seed(0)
         file = os.path.join(
@@ -199,7 +198,7 @@ class TestAlignInputs(unittest.TestCase):
             sam_res = self.sam.separate(batch, noise=noise.transpose(1, 2))
 
         self.check_wav(sam_res.target[0], ab_res["wav"][0])
-        self.check_wav(sam_res.tarresidualget[0], ab_res["rest_wav"][0])
+        self.check_wav(sam_res.residual[0], ab_res["rest_wav"][0])
 
 
 if __name__ == "__main__":

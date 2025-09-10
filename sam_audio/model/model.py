@@ -10,10 +10,15 @@ from sam_audio.inputs import Batch, prepare_inputs
 from sam_audio.model.align import AlignModalities
 from sam_audio.model.base import BaseModel
 from sam_audio.model.codec import DACVAE
-from sam_audio.model.config import SAM_AUDIO_CONFIGS, SAMAudioConfig
+from sam_audio.model.config import (
+    SAM_AUDIO_CONFIGS,
+    MetaCLIPConfig,
+    PerceptionEncoderConfig,
+    SAMAudioConfig,
+)
 from sam_audio.model.text_encoder import T5TextEncoder
 from sam_audio.model.transformer import DiT
-from sam_audio.model.vision_encoder import MetaCLIPEncoder
+from sam_audio.model.vision_encoder import MetaCLIPEncoder, PerceptionEncoder
 
 DFLT_ODE_OPT = {"method": "midpoint", "options": {"step_size": 2 / 32}}
 
@@ -73,7 +78,14 @@ class SAMAudio(BaseModel):
         super().__init__()
         self.audio_codec = DACVAE(cfg.audio_codec)
         self.text_encoder = T5TextEncoder(cfg.text_encoder)
-        self.vision_encoder = MetaCLIPEncoder(cfg.vision_encoder)
+        if isinstance(cfg.vision_encoder, MetaCLIPConfig):
+            self.vision_encoder = MetaCLIPEncoder(cfg.vision_encoder)
+        elif isinstance(cfg.vision_encoder, PerceptionEncoderConfig):
+            self.vision_encoder = PerceptionEncoder(cfg.vision_encoder)
+        else:
+            raise ValueError(
+                f"Unrecognized vision_encoder config: {type(cfg.vision_encoder)}"
+            )
         self.transformer = DiT(**asdict(cfg.transformer))
 
         self.proj = torch.nn.Linear(cfg.in_channels, cfg.transformer.dim)

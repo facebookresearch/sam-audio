@@ -41,19 +41,26 @@ def get_model(name):
         import configs.resolvers  # noqa F401
         from audiobox.e2e.e2e import SeparationE2EModel
 
-        checkpoint_pth = "/home/mattle/checkpoints/separation/demo/models/vts_mitigated_v1/passrm_video_two_stream_mitigated_scratch_higher_span_ratio_300k_r1.ckpt"
-        overrides = [
+        checkpoint_path = "/home/mattle/checkpoints/separation/demo/models/vts_mitigated_v1/passrm_video_two_stream_mitigated_scratch_higher_span_ratio_300k_r1.ckpt"
+        additional_overrides = [
             "data.batch_feature_extractors.0.pretrained=/home/mattle/checkpoints/metaclip/v2/metaclipv2_h14_genai.pt",
             "data.batch_feature_extractors.0.cache_dir=/home/mattle/.cache/openclip",
+        ]
+        checkpoint_path = (
+            "/home/mattle/checkpoints/separation/demo/models/vts_20250826/model.ckpt"
+        )
+        additional_overrides = []
+
+        overrides = [
             "data.feature_extractor.repository=/home/mattle/checkpoints/dacvae/vae_large_scale_pretrain_v2_48000_hop1920_ld128/100k/dacvae",
             "data.dataset.conditioning.video.height=224",
             "data.dataset.conditioning.video.width=224",
             "data.dataset.conditioning.video.height=224",
             "data.dataset.conditioning.video.width=224",
-        ]
+        ] + additional_overrides
         model = SeparationE2EModel(
             device=torch.device("cuda"),
-            audio_checkpoint=checkpoint_pth,
+            audio_checkpoint=checkpoint_path,
             overrides=overrides,
             precision="bf16",
             vocoder_checkpoint="/home/mattle/checkpoints/dacvae/vae_large_scale_pretrain_v2_48000_hop1920_ld128/100k/dacvae/weights.pth",
@@ -66,10 +73,17 @@ def get_model(name):
     elif name == "sam":
         from sam_audio.model.model import SAMAudio
 
+        checkpoint_path = (
+            "/home/mattle/checkpoints/separation/demo/models/vts_mitigated_v1/oss.ckpt"
+        )
+        config = "base"
+        checkpoint_path = (
+            "/home/mattle/checkpoints/separation/demo/models/vts_20250826/oss.pth"
+        )
+        config = "base-pe"
+
         model = SAMAudio.from_config(
-            "base",
-            pretrained=True,
-            checkpoint_path="/home/mattle/checkpoints/separation/demo/models/vts_mitigated_v1/oss.ckpt",
+            config, pretrained=True, checkpoint_path=checkpoint_path
         )
         model = model.to("cuda").eval()
         MODELS[name] = model

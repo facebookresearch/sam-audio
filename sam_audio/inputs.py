@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import decord
 import torch
@@ -59,6 +59,19 @@ def mask_from_sizes(sizes: torch.Tensor) -> torch.Tensor:
 
 
 Anchor = Tuple[str, float, float]
+
+
+def load_video(sizes: torch.Tensor, video_paths: List[str], fps: Optional[int] = None):
+    video = []
+    for size, video_path in zip(sizes, video_paths):
+        vr = decord.VideoReader(video_path, height=224, width=224)
+        frames = vr[:]
+        T, H, W, C = frames.shape
+        interpolated = F.interpolate(
+            rearrange(frames, "t h w c -> c (h w) t"), size=size, mode="nearest"
+        )
+        video.append(rearrange(interpolated, "c (h w) t -> t c h w", h=H, w=W))
+    return video
 
 
 def prepare_inputs(
@@ -122,15 +135,9 @@ def prepare_inputs(
 
     video = video_mask = None
     if video_paths is not None:
-        video = []
-        for size, video_path in zip(sizes, video_paths):
-            vr = decord.VideoReader(video_path, height=224, width=224)
-            frames = vr[:]
-            T, H, W, C = frames.shape
-            interpolated = F.interpolate(
-                rearrange(frames, "t h w c -> c (h w) t"), size=size, mode="nearest"
-            )
-            video.append(rearrange(interpolated, "c (h w) t -> t c h w", h=H, w=W))
+        video = load_video(sizes, video_paths)
+    if video_mask_paths is not None:
+        video = load_video(sizes, video_mask_paths)
 
     return Batch(
         audios=audios,

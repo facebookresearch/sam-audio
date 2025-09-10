@@ -31,11 +31,25 @@ class T5EncoderConfig:
 
 @dataclass
 class VisionEncoderConfig:
-    name: str = "ViT-H-14"
     dim: int = 1024
-    resize_type = "aspect_variant"
     batch_size: int = 300
+
+
+@dataclass
+class MetaCLIPConfig(VisionEncoderConfig):
+    dim: int = 1024
+    name: str = "ViT-H-14"
+    resize_type = "aspect_variant"
     normalize_features: bool = True
+
+
+@dataclass
+class PerceptionEncoderConfig(VisionEncoderConfig):
+    dim: int = 1024
+    name: str = "PE-Core-L14-336"
+    normalize_feature: bool = True
+    interpolation_mode: str = "BICUBIC"
+    image_size: int = 336
 
 
 @dataclass
@@ -78,7 +92,7 @@ class SAMAudioConfig:
     in_channels: int = 768
     audio_codec: DACVAEConfig = field(default_factory=DACVAEConfig)
     text_encoder: T5EncoderConfig = field(default_factory=T5EncoderConfig)
-    vision_encoder: VisionEncoderConfig = field(default_factory=VisionEncoderConfig)
+    vision_encoder: VisionEncoderConfig = field(default_factory=MetaCLIPConfig)
     transformer: TransformerConfig = field(default_factory=TransformerConfig)
     video_feature_dim: int = 1024  # metaclip dim
     num_anchors: int = 3
@@ -122,4 +136,6 @@ class JudgeConfig:
 
 
 SAM_AUDIO_CONFIGS["base"] = SAMAudioConfig()
+SAM_AUDIO_CONFIGS["base-pe"] = SAMAudioConfig(vision_encoder=PerceptionEncoderConfig())
+
 JUDGE_CONFIGS["base"] = JudgeConfig()
