@@ -81,7 +81,7 @@ class TransformerConfig:
 
 
 @dataclass
-class ImageBindReRanker:
+class ImageBindRankerConfig:
     checkpoint: Optional[str] = (
         None  # Optional local checkpoint, otherwise download from internet
     )
@@ -97,7 +97,9 @@ class SAMAudioConfig:
     video_feature_dim: int = 1024  # metaclip dim
     num_anchors: int = 3
     anchor_embedding_dim: int = 128
-    imagebind_config: ImageBindReRanker = field(default_factory=ImageBindReRanker)
+    imagebind_config: ImageBindRankerConfig = field(
+        default_factory=ImageBindRankerConfig
+    )
 
 
 @dataclass

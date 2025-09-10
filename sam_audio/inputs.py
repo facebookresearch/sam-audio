@@ -28,6 +28,7 @@ def batch_audio(
 @dataclass(kw_only=True)
 class Batch:
     audios: torch.Tensor
+    sizes: torch.Tensor
     audio_feature_mask: torch.Tensor
     descriptions: list[str]
     anchor_ids: torch.Tensor
@@ -35,6 +36,7 @@ class Batch:
     audio_pad_mask: Optional[torch.Tensor] = None
     video: Optional[list[torch.Tensor]] = None
     video_mask: Optional[list[torch.Tensor]] = None
+    video_paths: Optional[List[str]] = None
 
     def __post_init__(self):
         assert self.audios.size(0) == len(self.descriptions)
@@ -44,6 +46,7 @@ class Batch:
         self.audio_feature_mask = self.audio_feature_mask.to(device)
         self.anchor_ids = self.anchor_ids.to(device)
         self.anchor_alignment = self.anchor_alignment.to(device)
+        self.sizes = self.sizes.to(device)
         if self.audio_pad_mask is not None:
             self.audio_pad_mask = self.audio_pad_mask.to(device)
         if self.video is not None:
@@ -141,6 +144,7 @@ def prepare_inputs(
 
     return Batch(
         audios=audios,
+        sizes=sizes,
         audio_feature_mask=audio_feature_mask,
         descriptions=descriptions,
         audio_pad_mask=audio_pad_mask,
@@ -148,4 +152,5 @@ def prepare_inputs(
         anchor_alignment=anchor_alignment,
         video=video,
         video_mask=video_mask,
+        video_paths=video_paths,
     )
