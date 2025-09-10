@@ -6,6 +6,7 @@ import torch
 import torchaudio
 from audiobox.e2e.use_case.audio_editing import Separation
 
+from sam_audio.inputs import batch_audio
 from sam_audio.model.model import DFLT_ODE_OPT
 from tests.models import deterministic_randn_liked, get_model
 
@@ -68,6 +69,50 @@ class TestAlignInputs(unittest.TestCase):
                     noisy_audio=noise.transpose(1, 2), time=time, **sam_kwargs
                 )
             self.assertLess((sam_output.transpose(1, 2) - ab_output).abs().max(), 1e-4)
+
+    def test_text_based_separation_forward_batched(self):
+        file = os.path.join(
+            self.dir, "data/702459_6464538-hq_690345_1453392-hq_snr-3.0.wav"
+        )
+        files = [file, file.replace(".wav", "_shortened.wav")]
+        descriptions = [
+            "Raindrops are falling heavily, splashing on the ground.",
+            "Raindrops are falling heavily",
+        ]
+
+        transform = self.sam.get_transform()
+
+        def forward(descriptions, paths, features, noise):
+            batch = transform(descriptions=descriptions, audio_paths=paths).to("cuda")
+            time = torch.tensor([0.5] * len(descriptions), device="cuda")
+            with torch.no_grad():
+                sam_kwargs = self.sam._get_forward_args(batch)
+                sam_kwargs["audio_features"] = features
+                sam_output = self.sam.forward(
+                    noisy_audio=noise, time=time, **sam_kwargs
+                )
+            return sam_output
+
+        wavs, sizes = batch_audio(files)
+        sizes = self.sam.audio_codec.wav_idx_to_feature_idx(sizes)
+        features = self.sam.audio_codec(wavs.cuda())
+        features = torch.cat([features, features], dim=1).transpose(1, 2)
+        noise = torch.randn_like(features)
+
+        # x_embedder does not respect masking
+        old_x_embedder = self.sam.transformer.x_embedder
+        self.sam.transformer.x_embedder = torch.nn.Identity()
+        batched = forward(descriptions, files, features, noise)
+        single = forward(
+            descriptions[1:],
+            files[1:],
+            features[[1], : sizes[1]],
+            noise[[1], : sizes[1]],
+        )
+        self.sam.transformer.x_embedder = old_x_embedder
+
+        diff = (batched[[1], : sizes[1]] - single).abs()
+        self.assertLess(diff.max(), 1e-4)
 
     @deterministic_randn_liked("torch.randn_like", torch.randn_like)
     def test_text_based_separation_e2e(self):
