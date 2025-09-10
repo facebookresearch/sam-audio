@@ -74,20 +74,41 @@ class TestAlignInputs(unittest.TestCase):
                 )
             self.assertLess((sam_output.transpose(1, 2) - ab_output).abs().max(), 1e-4)
 
-    def test_text_based_separation_forward_batched(self):
-        file = os.path.join(
-            self.dir, "data/702459_6464538-hq_690345_1453392-hq_snr-3.0.wav"
-        )
-        files = [file, file.replace(".wav", "_shortened.wav")]
+    def get_file(self, basename):
+        return os.path.join(self.dir, "data", basename)
+
+    def test_batched(self):
+        files = [
+            self.get_file("702459_6464538-hq_690345_1453392-hq_snr-3.0.wav"),
+            self.get_file("702459_6464538-hq_690345_1453392-hq_snr-3.0_shortened.wav"),
+        ]
+        video_files = [
+            self.get_file("15pi8h_bHQE_173000_183000.mp4"),
+            self.get_file("15pi8h_bHQE_173000_183000_shortened.mp4"),
+        ]
+        video_mask_files = [
+            self.get_file("15pi8h_bHQE_173000_183000_mask.mp4"),
+            self.get_file("15pi8h_bHQE_173000_183000_shortened_mask.mp4"),
+        ]
         descriptions = [
             "Raindrops are falling heavily, splashing on the ground.",
             "Raindrops are falling heavily",
         ]
+        anchors = [
+            [["+", 0.567, 0.795], ["+", 3.173, 3.591]],
+            [["+", 0.567, 0.795]],
+        ]
 
         transform = self.sam.get_transform()
 
-        def forward(descriptions, paths, features, noise):
-            batch = transform(descriptions=descriptions, audio_paths=paths).to("cuda")
+        def forward(descriptions, paths, videos, video_masks, anchors, features, noise):
+            batch = transform(
+                descriptions=descriptions,
+                audio_paths=paths,
+                video_paths=videos,
+                video_mask_paths=video_masks,
+                anchors=anchors,
+            ).to("cuda")
             time = torch.tensor([0.5] * len(descriptions), device="cuda")
             with torch.no_grad():
                 sam_kwargs = self.sam._get_forward_args(batch)
@@ -106,10 +127,15 @@ class TestAlignInputs(unittest.TestCase):
         # x_embedder does not respect masking
         old_x_embedder = self.sam.transformer.x_embedder
         self.sam.transformer.x_embedder = torch.nn.Identity()
-        batched = forward(descriptions, files, features, noise)
+        batched = forward(
+            descriptions, files, video_files, video_mask_files, anchors, features, noise
+        )
         single = forward(
             descriptions[1:],
             files[1:],
+            video_files[1:],
+            video_mask_files[1:],
+            anchors[1:],
             features[[1], : sizes[1]],
             noise[[1], : sizes[1]],
         )
