@@ -114,6 +114,12 @@ class TestAlignInputs(unittest.TestCase):
         diff = (batched[[1], : sizes[1]] - single).abs()
         self.assertLess(diff.max(), 1e-4)
 
+    def check_wav(self, generated, hyp):
+        diff = (generated - hyp).abs()
+        corr = torch.corrcoef(torch.cat([generated, hyp]))
+        self.assertAlmostEqual(diff.max().item(), 0, places=3)
+        self.assertGreater(corr.min().item(), 0.99)
+
     @deterministic_randn_liked("torch.randn_like", torch.randn_like)
     def test_text_based_separation_e2e(self):
         torch.manual_seed(0)
@@ -130,15 +136,7 @@ class TestAlignInputs(unittest.TestCase):
             descriptions=[description],
             audio_paths=[file],
         )
-
         batch = batch.to("cuda")
-        # check that randn_like is made determinstic using the mock
-        self.assertTrue(
-            torch.allclose(
-                torch.randn_like(batch.audios), torch.randn_like(batch.audios)
-            )
-        )
-
         use_case = Separation(
             input_paths=[file], descriptions=[description], mask_times=[mask_times]
         )
@@ -159,15 +157,49 @@ class TestAlignInputs(unittest.TestCase):
         ):
             sam_res = self.sam.separate(batch, noise=noise.transpose(1, 2))
 
-        diff = (sam_res.target[0] - ab_res["wav"][0]).abs()
-        corr = torch.corrcoef(torch.cat([sam_res.target[0], ab_res["wav"][0]]))
-        self.assertAlmostEqual(diff.max().item(), 0, places=3)
-        self.assertGreater(corr.min().item(), 0.99)
+        self.check_wav(sam_res.target[0], ab_res["wav"][0])
+        self.check_wav(sam_res.tarresidualget[0], ab_res["rest_wav"][0])
 
-        diff = (sam_res.residual[0] - ab_res["rest_wav"][0]).abs()
-        corr = torch.corrcoef(torch.cat([sam_res.target[0], ab_res["wav"][0]]))
-        self.assertAlmostEqual(diff.max().item(), 0, places=3)
-        self.assertGreater(corr.min().item(), 0.99)
+    @deterministic_randn_liked("torch.randn_like", torch.randn_like)
+    def test_text_based_separation_w_anchors_e2e(self):
+        torch.manual_seed(0)
+        file = os.path.join(
+            self.dir, "data/702459_6464538-hq_690345_1453392-hq_snr-3.0.wav"
+        )
+        description = "Raindrops are falling heavily, splashing on the ground."
+        info = torchaudio.info(file)
+        mask_times = [0, info.num_frames / info.sample_rate]
+        transform = self.sam.get_transform()
+        anchors = [[["+", 0.567, 0.795], ["+", 3.173, 3.591]]]
+        batch = transform(
+            descriptions=[description], audio_paths=[file], anchors=anchors
+        )
+        batch = batch.to("cuda")
+        use_case = Separation(
+            input_paths=[file],
+            descriptions=[description],
+            mask_times=[mask_times],
+            anchors=anchors,
+        )
+        with torch.no_grad():
+            # Use the same noise
+            ab_batch = next(
+                use_case.prepare_batch(self.model.method, None, self.model.dset)
+            )
+            noise = torch.randn_like(ab_batch["x"])
+            ab_res = self.model.samplers["audio_sampler"].sample(
+                self.model.method, noise, extra=ab_batch, ode_opts=DFLT_ODE_OPT
+            )
+
+        with torch.no_grad(), patch.object(
+            self.sam,
+            "_get_audio_features",
+            return_value=ab_batch["edit_audio_embedding"]["seq"],
+        ):
+            sam_res = self.sam.separate(batch, noise=noise.transpose(1, 2))
+
+        self.check_wav(sam_res.target[0], ab_res["wav"][0])
+        self.check_wav(sam_res.tarresidualget[0], ab_res["rest_wav"][0])
 
 
 if __name__ == "__main__":
