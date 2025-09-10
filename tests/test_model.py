@@ -15,7 +15,11 @@ class TestAlignInputs(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.dir = os.path.dirname(os.path.realpath(__file__))
-        cls.model = get_model("audiobox")
+        overrides = [
+            "data.dataset.conditioning.video.av_alignment=false",
+            "data.dataset.conditioning.video_mask.av_alignment=false",
+        ]
+        cls.model = get_model("audiobox", additional_overrides=overrides)
         cls.sam = get_model("sam")
 
     def test_transformer(self):
@@ -114,11 +118,33 @@ class TestAlignInputs(unittest.TestCase):
         diff = (batched[[1], : sizes[1]] - single).abs()
         self.assertLess(diff.max(), 1e-4)
 
-    def check_wav(self, generated, hyp):
+    def check_wav(self, generated, hyp, places=2):
         diff = (generated - hyp).abs()
         corr = torch.corrcoef(torch.cat([generated, hyp]))
-        self.assertAlmostEqual(diff.max().item(), 0, places=3)
+        self.assertAlmostEqual(diff.max().item(), 0, places=places)
         self.assertGreater(corr.min().item(), 0.99)
+
+    def _test_e2e(self, use_case, batch, places=2):
+        with torch.no_grad():
+            # Use the same noise
+            ab_batch = next(
+                use_case.prepare_batch(self.model.method, None, self.model.dset)
+            )
+            noise = torch.randn_like(ab_batch["x"])
+            ab_res = self.model.samplers["audio_sampler"].sample(
+                self.model.method, noise, extra=ab_batch, ode_opts=DFLT_ODE_OPT
+            )
+
+        # Note that we patch _get_audio_features to cope with randomness from dacvae
+        with torch.no_grad(), patch.object(
+            self.sam,
+            "_get_audio_features",
+            return_value=ab_batch["edit_audio_embedding"]["seq"],
+        ):
+            sam_res = self.sam.separate(batch, noise=noise.transpose(1, 2))
+
+        self.check_wav(sam_res.target[0], ab_res["wav"][0], places=places)
+        self.check_wav(sam_res.residual[0], ab_res["rest_wav"][0], places=places)
 
     def test_text_based_separation_e2e(self):
         torch.manual_seed(0)
@@ -139,26 +165,7 @@ class TestAlignInputs(unittest.TestCase):
         use_case = Separation(
             input_paths=[file], descriptions=[description], mask_times=[mask_times]
         )
-        with torch.no_grad():
-            # Use the same noise
-            ab_batch = next(
-                use_case.prepare_batch(self.model.method, None, self.model.dset)
-            )
-            noise = torch.randn_like(ab_batch["x"])
-            ab_res = self.model.samplers["audio_sampler"].sample(
-                self.model.method, noise, extra=ab_batch, ode_opts=DFLT_ODE_OPT
-            )
-
-        # Note that we patch _get_audio_features to cope with randomness from dacvae
-        with torch.no_grad(), patch.object(
-            self.sam,
-            "_get_audio_features",
-            return_value=ab_batch["edit_audio_embedding"]["seq"],
-        ):
-            sam_res = self.sam.separate(batch, noise=noise.transpose(1, 2))
-
-        self.check_wav(sam_res.target[0], ab_res["wav"][0])
-        self.check_wav(sam_res.residual[0], ab_res["rest_wav"][0])
+        self._test_e2e(use_case, batch)
 
     def test_text_based_separation_w_anchors_e2e(self):
         torch.manual_seed(0)
@@ -180,25 +187,37 @@ class TestAlignInputs(unittest.TestCase):
             mask_times=[mask_times],
             anchors=anchors,
         )
-        with torch.no_grad():
-            # Use the same noise
-            ab_batch = next(
-                use_case.prepare_batch(self.model.method, None, self.model.dset)
-            )
-            noise = torch.randn_like(ab_batch["x"])
-            ab_res = self.model.samplers["audio_sampler"].sample(
-                self.model.method, noise, extra=ab_batch, ode_opts=DFLT_ODE_OPT
-            )
+        self._test_e2e(use_case, batch)
 
-        with torch.no_grad(), patch.object(
-            self.sam,
-            "_get_audio_features",
-            return_value=ab_batch["edit_audio_embedding"]["seq"],
-        ):
-            sam_res = self.sam.separate(batch, noise=noise.transpose(1, 2))
-
-        self.check_wav(sam_res.target[0], ab_res["wav"][0])
-        self.check_wav(sam_res.residual[0], ab_res["rest_wav"][0])
+    def test_video_based_separation_e2e(self):
+        torch.manual_seed(0)
+        file = os.path.join(
+            self.dir, "data/702459_6464538-hq_690345_1453392-hq_snr-3.0.wav"
+        )
+        description = "Raindrops are falling heavily, splashing on the ground."
+        video_file = os.path.join(self.dir, "data/15pi8h_bHQE_173000_183000.mp4")
+        mask_file = os.path.join(self.dir, "data/15pi8h_bHQE_173000_183000_mask.mp4")
+        info = torchaudio.info(file)
+        mask_times = [0, info.num_frames / info.sample_rate]
+        transform = self.sam.get_transform()
+        anchors = [[["+", 0.567, 0.795], ["+", 3.173, 3.591]]]
+        batch = transform(
+            descriptions=[description],
+            audio_paths=[file],
+            anchors=anchors,
+            video_paths=[video_file],
+            video_mask_paths=[mask_file],
+        )
+        batch = batch.to("cuda")
+        use_case = Separation(
+            input_paths=[file],
+            descriptions=[description],
+            mask_times=[mask_times],
+            anchors=anchors,
+            video_paths=[video_file],
+            extra_items=[{"video_mask_path": mask_file}],
+        )
+        self._test_e2e(use_case, batch, places=2)
 
 
 if __name__ == "__main__":

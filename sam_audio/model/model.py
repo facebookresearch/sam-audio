@@ -188,23 +188,18 @@ class SAMAudio(BaseModel):
         audio_features = self.audio_codec(audios).transpose(1, 2)
         return torch.cat([audio_features, audio_features], dim=2)
 
+    def _get_video_features(self, video, audio_features):
+        B, T, _ = audio_features.shape
+        if video is None:
+            return audio_features.new_zeros(B, self.vision_encoder.dim, T)
+        else:
+            return self.vision_encoder(video).transpose(1, 2)
+
     def _get_forward_args(self, batch: Batch):
         audio_features = self._get_audio_features(batch.audios)
-        B, T, _ = audio_features.shape
-
         text_features, text_mask = self.text_encoder(batch.descriptions)
-
-        if batch.video is None:
-            video_features = audio_features.new_zeros(B, self.vision_encoder.dim, T)
-        else:
-            video_features = self.vision_encoder(batch.video)
-
-        if batch.video_mask is None:
-            video_mask_features = audio_features.new_zeros(
-                B, self.vision_encoder.dim, T
-            )
-        else:
-            video_mask_features = self.vision_encoder(batch.video_mask)
+        video_features = self._get_video_features(batch.video, audio_features)
+        video_mask_features = self._get_video_features(batch.video_mask, audio_features)
 
         return {
             "audio_features": audio_features,

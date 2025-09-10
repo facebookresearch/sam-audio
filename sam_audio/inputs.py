@@ -64,7 +64,7 @@ Anchor = Tuple[str, float, float]
 def load_video(sizes: torch.Tensor, video_paths: List[str], fps: Optional[int] = None):
     video = []
     for size, video_path in zip(sizes, video_paths):
-        vr = decord.VideoReader(video_path, height=224, width=224)
+        vr = decord.VideoReader(video_path, height=336, width=336)
         frames = vr[:]
         T, H, W, C = frames.shape
         interpolated = F.interpolate(
@@ -137,7 +137,7 @@ def prepare_inputs(
     if video_paths is not None:
         video = load_video(sizes, video_paths)
     if video_mask_paths is not None:
-        video = load_video(sizes, video_mask_paths)
+        video_mask = load_video(sizes, video_mask_paths)
 
     return Batch(
         audios=audios,

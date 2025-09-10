@@ -34,29 +34,29 @@ def replace_flash_attn(module):
             replace_flash_attn(child)
 
 
-def get_model(name):
+def get_model(name, additional_overrides=None):
+    additional_overrides = additional_overrides or []
     if name in MODELS:
         return MODELS[name]
     if name == "audiobox":
         import configs.resolvers  # noqa F401
         from audiobox.e2e.e2e import SeparationE2EModel
 
-        checkpoint_path = "/home/mattle/checkpoints/separation/demo/models/vts_mitigated_v1/passrm_video_two_stream_mitigated_scratch_higher_span_ratio_300k_r1.ckpt"
-        additional_overrides = [
-            "data.batch_feature_extractors.0.pretrained=/home/mattle/checkpoints/metaclip/v2/metaclipv2_h14_genai.pt",
-            "data.batch_feature_extractors.0.cache_dir=/home/mattle/.cache/openclip",
-        ]
+        # checkpoint_path = "/home/mattle/checkpoints/separation/demo/models/vts_mitigated_v1/passrm_video_two_stream_mitigated_scratch_higher_span_ratio_300k_r1.ckpt"
+        # additional_overrides += [
+        #     "data.batch_feature_extractors.0.pretrained=/home/mattle/checkpoints/metaclip/v2/metaclipv2_h14_genai.pt",
+        #     "data.batch_feature_extractors.0.cache_dir=/home/mattle/.cache/openclip",
+        # ]
         checkpoint_path = (
             "/home/mattle/checkpoints/separation/demo/models/vts_20250826/model.ckpt"
         )
-        additional_overrides = []
 
         overrides = [
             "data.feature_extractor.repository=/home/mattle/checkpoints/dacvae/vae_large_scale_pretrain_v2_48000_hop1920_ld128/100k/dacvae",
-            "data.dataset.conditioning.video.height=224",
-            "data.dataset.conditioning.video.width=224",
-            "data.dataset.conditioning.video.height=224",
-            "data.dataset.conditioning.video.width=224",
+            "data.dataset.conditioning.video.height=336",
+            "data.dataset.conditioning.video.width=336",
+            "data.dataset.conditioning.video_mask.height=336",
+            "data.dataset.conditioning.video_mask.width=336",
         ] + additional_overrides
         model = SeparationE2EModel(
             device=torch.device("cuda"),
