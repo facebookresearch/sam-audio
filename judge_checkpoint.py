@@ -1,10 +1,12 @@
 import argparse
+import json
 import os
 import re
 
 import torch
 from dac.model import dac
 
+from sam_audio.model.config import JUDGE_CONFIGS, serialize_config
 from sam_audio.model.judge import Judge
 from tests.models import get_model
 
@@ -87,14 +89,22 @@ def main(audiobox_path: str):
             }
         )
 
-    output_path = os.path.join(os.path.dirname(audiobox_path), "oss.pth")
-    torch.save(checkpoint, output_path)
-
     model_type = "base"
 
-    model = Judge.from_config(model_type, pretrained=True, checkpoint_path=output_path)  # noqa
+    output_path = os.path.join(os.path.dirname(audiobox_path), "hf/checkpoint.pt")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    torch.save(checkpoint, output_path)
+
+    config_path = os.path.join(os.path.dirname(audiobox_path), "hf/params.json")
+    with open(config_path, "w") as fout:
+        print(
+            json.dumps(serialize_config(JUDGE_CONFIGS[model_type]), indent=4), file=fout
+        )
+
+    model = Judge.from_pretrained(os.path.join(os.path.dirname(audiobox_path), "hf"))
 
     breakpoint()
+    return model
 
 
 if __name__ == "__main__":

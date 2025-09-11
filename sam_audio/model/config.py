@@ -1,11 +1,46 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, is_dataclass
 from typing import Optional
 
 SAM_AUDIO_CONFIGS = {}
 JUDGE_CONFIGS = {}
+_CONFIG_CLASSES = {}
 
 
-@dataclass
+def config(cls=None, **kwargs):
+    def wrap(cls):
+        _CONFIG_CLASSES[cls.__name__] = cls
+        return dataclass(**kwargs)(cls)
+
+    if cls is None:
+        return wrap
+    return wrap(cls)
+
+
+def serialize_config(cfg):
+    if is_dataclass(cfg):
+        cls_name = cfg.__class__.__name__
+        return {
+            "_target_": cls_name,
+            **{k: serialize_config(v) for k, v in cfg.__dict__.items()},
+        }
+    return cfg
+
+
+def deserialize_config(config):
+    if isinstance(config, dict):
+        target = config.pop("_target_", None)
+        res = {k: deserialize_config(v) for k, v in config.items()}
+        if target is not None:
+            cls = _CONFIG_CLASSES[target]
+            res = cls(**res)
+        return res
+    elif isinstance(config, list):
+        return [deserialize_config(x) for x in config]
+    else:
+        return config
+
+
+@config(kw_only=True)
 class DACVAEConfig:
     encoder_dim: int = 64
     encoder_rates: list[int] = field(default_factory=lambda: [2, 8, 10, 12])
@@ -21,21 +56,34 @@ class DACVAEConfig:
     std: float = 1.0
 
 
-@dataclass
-class T5EncoderConfig:
-    name: str = "t5-base"
-    max_length: Optional[int] = 512
-    pad_mode: str = "longest"
+@config(kw_only=True)
+class TextEncoderConfig:
     dim: int = 768
 
 
-@dataclass
+@config(kw_only=True)
+class T5EncoderConfig(TextEncoderConfig):
+    name: str = "t5-base"
+    max_length: Optional[int] = 512
+    pad_mode: str = "longest"
+
+
+@config(kw_only=True)
+class ModernBERTConfig(TextEncoderConfig):
+    model_id: str = "answerdotai/ModernBERT-large"
+    pad_mode: str = "longest"
+    max_length: int = 512
+    nth_layer: Optional[int] = 22
+    dim: int = 1024
+
+
+@config(kw_only=True)
 class VisionEncoderConfig:
     dim: int = 1024
     batch_size: int = 300
 
 
-@dataclass
+@config(kw_only=True)
 class MetaCLIPConfig(VisionEncoderConfig):
     dim: int = 1024
     name: str = "ViT-H-14"
@@ -43,7 +91,7 @@ class MetaCLIPConfig(VisionEncoderConfig):
     normalize_features: bool = True
 
 
-@dataclass
+@config(kw_only=True)
 class PerceptionEncoderConfig(VisionEncoderConfig):
     dim: int = 1024
     name: str = "PE-Core-L14-336"
@@ -52,7 +100,7 @@ class PerceptionEncoderConfig(VisionEncoderConfig):
     image_size: int = 336
 
 
-@dataclass
+@config(kw_only=True)
 class TransformerConfig:
     dim: int = 2048
     n_heads: int = 16
@@ -80,14 +128,14 @@ class TransformerConfig:
     no_cross_attention: bool = False
 
 
-@dataclass
+@config(kw_only=True)
 class ImageBindRankerConfig:
     checkpoint: Optional[str] = (
         None  # Optional local checkpoint, otherwise download from internet
     )
 
 
-@dataclass(kw_only=True)
+@config(kw_only=True)
 class SAMAudioConfig:
     in_channels: int = 768
     audio_codec: DACVAEConfig = field(default_factory=DACVAEConfig)
@@ -102,16 +150,7 @@ class SAMAudioConfig:
     )
 
 
-@dataclass
-class ModernBERTConfig:
-    model_id: str = "answerdotai/ModernBERT-large"
-    pad_mode: str = "longest"
-    max_length: int = 512
-    dim: int = 1024
-    nth_layer: Optional[int] = 22
-
-
-@dataclass(kw_only=True)
+@config(kw_only=True)
 class JudgeConfig:
     audio_codec: DACVAEConfig = field(default_factory=DACVAEConfig)
     text_encoder: ModernBERTConfig = field(default_factory=ModernBERTConfig)

@@ -1,5 +1,6 @@
 # from tests.utils import load_audiobox_model
 import argparse
+import json
 import os
 import re
 
@@ -8,6 +9,7 @@ from audiobox.e2e.e2e import SeparationE2EModel
 from dac.model import dac
 from omegaconf import OmegaConf
 
+from sam_audio.model.config import SAM_AUDIO_CONFIGS, serialize_config
 from sam_audio.model.model import SAMAudio
 
 
@@ -126,11 +128,18 @@ def main(audiobox_path: str):
                 }
             )
 
-    output_path = os.path.join(os.path.dirname(audiobox_path), "oss.pth")
+    output_path = os.path.join(os.path.dirname(audiobox_path), "hf/checkpoint.pt")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     torch.save(checkpoint, output_path)
-    model = SAMAudio.from_config(
-        model_type, pretrained=True, checkpoint_path=output_path
-    )
+
+    config_path = os.path.join(os.path.dirname(audiobox_path), "hf/params.json")
+    with open(config_path, "w") as fout:
+        print(
+            json.dumps(serialize_config(SAM_AUDIO_CONFIGS[model_type]), indent=4),
+            file=fout,
+        )
+
+    model = SAMAudio.from_pretrained(os.path.join(os.path.dirname(audiobox_path), "hf"))
     breakpoint()
     return model
 
