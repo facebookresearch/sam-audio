@@ -1,5 +1,5 @@
 import math
-from typing import Optional, Tuple
+from typing import Tuple
 
 import torch
 import torch.nn.functional as F
@@ -47,7 +47,7 @@ class Conv1d(torch.nn.Conv1d):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def forward(self, x: torch.Tensor, causal=False) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         kernel_size = self.kernel_size[0]
         stride = self.stride[0]
         dilation = self.dilation[0]
@@ -58,14 +58,10 @@ class Conv1d(torch.nn.Conv1d):
         extra_padding = get_extra_padding_for_conv1d(
             x, kernel_size, stride, padding_total
         )
-        if causal:
-            # Left padding for causal
-            x = pad1d(x, (padding_total, extra_padding))
-        else:
-            # Asymmetric padding required for odd strides
-            padding_right = padding_total // 2
-            padding_left = padding_total - padding_right
-            x = pad1d(x, (padding_left, padding_right + extra_padding))
+        # Asymmetric padding required for odd strides
+        padding_right = padding_total // 2
+        padding_left = padding_total - padding_right
+        x = pad1d(x, (padding_left, padding_right + extra_padding))
         return super().forward(x)
 
 
@@ -79,18 +75,13 @@ class ConvBlock1d(torch.nn.Module):
         stride: int = 1,
         dilation: int = 1,
         num_groups: int = 8,
-        use_norm: bool = True,
     ) -> None:
         super().__init__()
 
-        self.groupnorm = (
-            torch.nn.GroupNorm(num_groups=num_groups, num_channels=in_channels)
-            if use_norm
-            else torch.nn.Identity()
+        self.groupnorm = torch.nn.GroupNorm(
+            num_groups=num_groups, num_channels=in_channels
         )
-
         self.activation = torch.nn.SiLU()
-
         self.project = Conv1d(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -102,15 +93,10 @@ class ConvBlock1d(torch.nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        scale_shift: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        causal=False,
     ) -> torch.Tensor:
         x = self.groupnorm(x)
-        if scale_shift is not None:
-            scale, shift = scale_shift
-            x = x * (scale + 1) + shift
         x = self.activation(x)
-        return self.project(x, causal=causal)
+        return self.project(x)
 
 
 class ResnetBlock1d(torch.nn.Module):
@@ -122,7 +108,6 @@ class ResnetBlock1d(torch.nn.Module):
         kernel_size: int = 3,
         stride: int = 1,
         dilation: int = 1,
-        use_norm: bool = True,
         num_groups: int = 8,
     ) -> None:
         super().__init__()
@@ -133,14 +118,12 @@ class ResnetBlock1d(torch.nn.Module):
             kernel_size=kernel_size,
             stride=stride,
             dilation=dilation,
-            use_norm=use_norm,
             num_groups=num_groups,
         )
 
         self.block2 = ConvBlock1d(
             in_channels=out_channels,
             out_channels=out_channels,
-            use_norm=use_norm,
             num_groups=num_groups,
         )
 
@@ -150,13 +133,9 @@ class ResnetBlock1d(torch.nn.Module):
             else torch.nn.Identity()
         )
 
-    def forward(self, x: torch.Tensor, causal=False) -> torch.Tensor:
-        h = self.block1(x, causal=causal)
-
-        scale_shift = None
-
-        h = self.block2(h, scale_shift=scale_shift, causal=causal)
-
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = self.block1(x)
+        h = self.block2(h)
         return h + self.to_out(x)
 
 
@@ -171,14 +150,13 @@ class Patcher(torch.nn.Module):
         assert_message = f"out_channels must be divisible by patch_size ({patch_size})"
         assert out_channels % patch_size == 0, assert_message
         self.patch_size = patch_size
-
         self.block = ResnetBlock1d(
             in_channels=in_channels,
             out_channels=out_channels // patch_size,
             num_groups=1,
         )
 
-    def forward(self, x: torch.Tensor, causal=False) -> torch.Tensor:
-        x = self.block(x, causal=causal)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.block(x)
         x = rearrange(x, "b c (l p) -> b (c p) l", p=self.patch_size)
         return x
