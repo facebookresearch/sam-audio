@@ -6,7 +6,7 @@ import re
 import torch
 from dac.model import dac
 
-from sam_audio.model.config import JUDGE_CONFIGS, serialize_config
+from sam_audio.model.config import JudgeConfig, TransformerConfig, serialize_config
 from sam_audio.model.judge import Judge
 from tests.models import get_model
 
@@ -89,17 +89,32 @@ def main(audiobox_path: str):
             }
         )
 
-    model_type = "base"
+    config = JudgeConfig(
+        audio_encoder=TransformerConfig(
+            dim=1792,
+            out_channels=1792,
+            in_channels=128,
+            n_heads=14,
+            n_layers=28,
+            no_cross_attention=True,
+        ),
+        finetune_encoder=TransformerConfig(
+            dim=192,
+            out_channels=192,
+            in_channels=256,
+            n_heads=3,
+            n_layers=6,
+            no_cross_attention=True,
+        ),
+    )
 
     output_path = os.path.join(os.path.dirname(audiobox_path), "hf/checkpoint.pt")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     torch.save(checkpoint, output_path)
 
-    config_path = os.path.join(os.path.dirname(audiobox_path), "hf/params.json")
+    config_path = os.path.join(os.path.dirname(audiobox_path), "hf/config.json")
     with open(config_path, "w") as fout:
-        print(
-            json.dumps(serialize_config(JUDGE_CONFIGS[model_type]), indent=4), file=fout
-        )
+        print(json.dumps(serialize_config(config), indent=4), file=fout)
 
     model = Judge.from_pretrained(os.path.join(os.path.dirname(audiobox_path), "hf"))
 

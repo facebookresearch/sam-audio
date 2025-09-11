@@ -7,7 +7,7 @@ from sam_audio.inputs import batch_audio, mask_from_sizes
 from sam_audio.model.align import AlignModalities
 from sam_audio.model.base import BaseModel
 from sam_audio.model.codec import DACVAE
-from sam_audio.model.config import JUDGE_CONFIGS, JudgeConfig
+from sam_audio.model.config import JudgeConfig
 from sam_audio.model.text_encoder import ModernBERTEncoder
 from sam_audio.model.transformer import Transformer
 
@@ -99,6 +99,14 @@ class Judge(BaseModel):
         de_normalized = result * self.std + self.mean
         return JudgeOutput(*de_normalized.chunk(4, dim=1))
 
-    @classmethod
-    def get_configs(cls):
-        return JUDGE_CONFIGS
+    def load_state_dict(self, state_dict, strict=True):
+        if strict:
+            missing_keys, unexpected_keys = super().load_state_dict(
+                state_dict, strict=strict
+            )
+            # We load this directly from HF, not in checkpoint
+            missing_keys = [x for x in missing_keys if not x.startswith("text_encoder")]
+            if len(missing_keys) > 0 or len(unexpected_keys) > 0:
+                raise RuntimeError(
+                    f"Missing keys: {missing_keys}, unexpected_keys: {unexpected_keys}"
+                )

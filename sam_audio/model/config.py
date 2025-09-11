@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field, is_dataclass
 from typing import Optional
 
-SAM_AUDIO_CONFIGS = {}
-JUDGE_CONFIGS = {}
 _CONFIG_CLASSES = {}
 
 
@@ -174,9 +172,3 @@ class JudgeConfig:
             no_cross_attention=True,
         )
     )
-
-
-SAM_AUDIO_CONFIGS["base"] = SAMAudioConfig()
-SAM_AUDIO_CONFIGS["base-pe"] = SAMAudioConfig(vision_encoder=PerceptionEncoderConfig())
-
-JUDGE_CONFIGS["base"] = JudgeConfig()
