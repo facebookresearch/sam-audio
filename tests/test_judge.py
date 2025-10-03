@@ -8,9 +8,12 @@ from models import get_model
 
 
 class TestJudge(unittest.TestCase):
-    def get_audio(self, file, sample_rate: int = 48_000):
+    def get_file(self, basename):
         dir = os.path.dirname(os.path.realpath(__file__))
-        wav, sr = torchaudio.load(os.path.join(dir, file))
+        return os.path.join(dir, "data", basename)
+
+    def get_audio(self, file, sample_rate: int = 48_000):
+        wav, sr = torchaudio.load(file)
         if sr != sample_rate:
             wav = torchaudio.functional.resample(wav, sr, sample_rate).mean(
                 dim=0, keepdim=True
@@ -22,24 +25,35 @@ class TestJudge(unittest.TestCase):
     @torch.no_grad()
     def test_judge(self, compile_mock, randn_like_mock):
         def f(like, **kwargs):
-            # Mock this so that we get deterministic output from `randn` given the same input
-            nonlocal randn_like_mock
-            torch.manual_seed(0)
-            return randn_like_mock.orig_randn_like(like, **kwargs)
+            # The only place that we use this is in `DACVAE` latent sampling
+            return torch.zeros_like(like)
 
         randn_like_mock.side_effect = f
         compile_mock.side_effect = lambda *args, **kwargs: lambda x, *args, **kwargs: x
-        description = "Raindrops are falling heavily, splashing on the ground."
-        wav = self.get_audio("data/702459_6464538-hq_690345_1453392-hq_snr-3.0.wav")
-        hyp_wav = self.get_audio(
-            "data/702459_6464538-hq_690345_1453392-hq_snr-3.0_separated.wav"
+        description = (
+            "Raindrops are falling heavily, splashing on the ground.".lower().strip()
         )
+        wav_file = self.get_file(
+            "702459_6464538-hq_690345_1453392-hq_snr-3.0_resampled.wav"
+        )
+        hyp_wav_file = self.get_file(
+            "702459_6464538-hq_690345_1453392-hq_snr-3.0_separated.wav"
+        )
+        wav = self.get_audio(wav_file)
+        hyp_wav = self.get_audio(hyp_wav_file)
         ab_model = get_model("audiobox-judge")
-        sam_model = get_model("sam-judge")
+        sam_model, processor = get_model("sam-judge")
 
         with torch.inference_mode():
             ab_res = ab_model.predict([wav], [hyp_wav], [description])
-            sam_result = sam_model.predict([wav], [hyp_wav], [description])
+            processed = processor(
+                input_audio=[wav_file],
+                separated_audio=[hyp_wav_file],
+                text=[description],
+                return_tensors="pt",
+                padding=True,
+            ).to("cuda")
+            sam_result = sam_model(**processed)
 
         self.assertAlmostEqual(
             ab_res[0]["overall"], sam_result.overall.item(), places=2
@@ -57,32 +71,53 @@ class TestJudge(unittest.TestCase):
     @torch.no_grad()
     def test_batched(self, compile_mock, randn_like_mock):
         def f(like, **kwargs):
-            # Mock this so that we get deterministic output from `randn` given the same input
-            nonlocal randn_like_mock
-            torch.manual_seed(0)
-            return randn_like_mock.orig_randn_like(like, **kwargs)
+            # The only place that we use this is in `DACVAE` latent sampling
+            return torch.zeros_like(like)
 
         randn_like_mock.side_effect = f
         compile_mock.side_effect = lambda *args, **kwargs: lambda x, *args, **kwargs: x
-        description = "Raindrops are falling heavily, splashing on the ground."
-        wav = self.get_audio("data/702459_6464538-hq_690345_1453392-hq_snr-3.0.wav")
-        wav2 = self.get_audio(
-            "data/702459_6464538-hq_690345_1453392-hq_snr-3.0_shortened.wav"
+        description = (
+            "Raindrops are falling heavily, splashing on the ground.".lower().strip()
         )
-        hyp_wav = self.get_audio(
-            "data/702459_6464538-hq_690345_1453392-hq_snr-3.0_separated.wav"
-        )
-        hyp_wav2 = self.get_audio(
-            "data/702459_6464538-hq_690345_1453392-hq_snr-3.0_separated_shortened.wav"
-        )
-        sam_model = get_model("sam-judge")
+        description2 = "Raindrops are falling heavily".lower().strip()
+
+        wav_files = [
+            self.get_file("702459_6464538-hq_690345_1453392-hq_snr-3.0_resampled.wav"),
+            self.get_file("702459_6464538-hq_690345_1453392-hq_snr-3.0_shortened.wav"),
+        ]
+        hyp_files = [
+            self.get_file("702459_6464538-hq_690345_1453392-hq_snr-3.0_separated.wav"),
+            self.get_file(
+                "702459_6464538-hq_690345_1453392-hq_snr-3.0_separated_shortened.wav"
+            ),
+        ]
+
+        sam_model, processor = get_model("sam-judge")
 
         with torch.inference_mode():
-            batched = sam_model.predict(
-                [wav, wav2], [hyp_wav, hyp_wav2], [description, description]
+            processed = processor(
+                input_audio=wav_files,
+                separated_audio=hyp_files,
+                text=[description, description2],
+                return_tensors="pt",
+                padding=True,
             )
-            single1 = sam_model.predict([wav], [hyp_wav], [description])
-            single2 = sam_model.predict([wav2], [hyp_wav2], [description])
+            batched = sam_model(**processed.to("cuda"))
+
+            processed1 = processor(
+                input_audio=[wav_files[0]],
+                separated_audio=[hyp_files[0]],
+                text=[description],
+                return_tensors="pt",
+            )
+            processed2 = processor(
+                input_audio=[wav_files[1]],
+                separated_audio=[hyp_files[1]],
+                text=[description2],
+                return_tensors="pt",
+            )
+            single1 = sam_model(**processed1.to("cuda"))
+            single2 = sam_model(**processed2.to("cuda"))
 
         self.assertAlmostEqual(
             batched.overall[0].item(), single1.overall.item(), delta=0.1

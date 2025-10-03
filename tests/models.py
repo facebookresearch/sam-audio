@@ -1,3 +1,4 @@
+import os
 from contextlib import contextmanager
 from unittest import mock
 
@@ -35,6 +36,8 @@ def replace_flash_attn(module):
 
 
 def get_model(name, additional_overrides=None):
+    JUDGE_CHECKPOINT = "/home/mattle/checkpoints/separation/samjudge/v2/runs/peaudio_large_300hrs_base_regression_joint_posttrain/runs/2025-09-18-20-41-51/lightning_logs/version_0/checkpoints/epoch-000_step-100000.ckpt"
+
     additional_overrides = additional_overrides or []
     if name in MODELS:
         return MODELS[name]
@@ -42,11 +45,6 @@ def get_model(name, additional_overrides=None):
         import configs.resolvers  # noqa F401
         from audiobox.e2e.e2e import SeparationE2EModel
 
-        # checkpoint_path = "/home/mattle/checkpoints/separation/demo/models/vts_mitigated_v1/passrm_video_two_stream_mitigated_scratch_higher_span_ratio_300k_r1.ckpt"
-        # additional_overrides += [
-        #     "data.batch_feature_extractors.0.pretrained=/home/mattle/checkpoints/metaclip/v2/metaclipv2_h14_genai.pt",
-        #     "data.batch_feature_extractors.0.cache_dir=/home/mattle/.cache/openclip",
-        # ]
         checkpoint_path = (
             "/home/mattle/checkpoints/separation/demo/models/vts_20250826/model.ckpt"
         )
@@ -91,11 +89,9 @@ def get_model(name, additional_overrides=None):
     elif name == "audiobox-judge":
         from audiobox.models.audio_understanding.sam_audio_judge import E2ESAMAudioJudge
 
-        checkpoint_path = "/home/mattle/checkpoints/separation/samjudge/v2/runs/peaudio_300hrs_base_regression_joint_posttrain/runs/2025-08-14-13-48-43/epoch-000_step-100000.ckpt"
-        checkpoint_path = "/home/mattle/checkpoints/separation/samjudge/v2/runs/peaudio_300hrs_base_regression_joint_posttrain_v6/runs/2025-08-29-02-11-21/epoch-000_step-100000.ckpt"
         model = E2ESAMAudioJudge(
             batch_size=4,
-            checkpoint_path=checkpoint_path,
+            checkpoint_path=JUDGE_CHECKPOINT,
             dacvae_repository="/home/mattle/checkpoints/dacvae/vae_large_scale_pretrain_v2_48000_hop1920_ld128/100k/dacvae",
             num_workers=0,
             precision="fp32",
@@ -103,14 +99,12 @@ def get_model(name, additional_overrides=None):
         replace_flash_attn(model.model)
         return model
     elif name == "sam-judge":
-        from sam_audio.model.judge import Judge
+        from transformers import SamAudioJudgeModel, SamAudioJudgeProcessor
 
-        checkpoint_path = "/home/mattle/checkpoints/separation/samjudge/v2/runs/peaudio_300hrs_base_regression_joint_posttrain/runs/2025-08-14-13-48-43/oss.pth"
-        checkpoint_path = "/home/mattle/checkpoints/separation/samjudge/v2/runs/peaudio_300hrs_base_regression_joint_posttrain_v6/runs/2025-08-29-02-11-21/oss.pth"
-        model = Judge.from_config(
-            "base", pretrained=True, checkpoint_path=checkpoint_path
-        )
-        MODELS[name] = model
-        return MODELS[name].eval().cuda()
+        checkpoint_path = os.path.join(os.path.dirname(JUDGE_CHECKPOINT), "hf")
+        model = SamAudioJudgeModel.from_pretrained(checkpoint_path)
+        processor = SamAudioJudgeProcessor.from_pretrained(checkpoint_path)
+        MODELS[name] = model.eval().cuda(), processor
+        return MODELS[name]
     else:
         raise RuntimeError(f"Unknown model {name}")
