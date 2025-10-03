@@ -6,7 +6,7 @@ import torchaudio
 from audiobox.e2e.use_case.audio_editing import Separation
 
 from sam_audio.inputs import prepare_inputs
-from tests.models import get_model
+from tests.models import get_model, get_transformer
 
 
 class TestAlignInputs(unittest.TestCase):
@@ -32,7 +32,7 @@ class TestAlignInputs(unittest.TestCase):
         noise = torch.randn_like(batch["x"])
 
         with torch.no_grad():
-            aligned_input = self.model.method.model.model.prepare_aligned_input(
+            aligned_input = get_transformer(self.model).prepare_aligned_input(
                 {**batch, "noisy_x": noise}
             )
 
@@ -73,7 +73,7 @@ class TestAlignInputs(unittest.TestCase):
         noise = torch.randn_like(batch["x"])
 
         with torch.no_grad():
-            aligned_input = self.model.method.model.model.prepare_aligned_input(
+            aligned_input = get_transformer(self.model).prepare_aligned_input(
                 {**batch, "noisy_x": noise}
             )
 

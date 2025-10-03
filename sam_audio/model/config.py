@@ -138,9 +138,8 @@ class SAMAudioConfig:
     in_channels: int = 768
     audio_codec: DACVAEConfig = field(default_factory=DACVAEConfig)
     text_encoder: T5EncoderConfig = field(default_factory=T5EncoderConfig)
-    vision_encoder: VisionEncoderConfig = field(default_factory=MetaCLIPConfig)
+    vision_encoder: VisionEncoderConfig = field(default_factory=PerceptionEncoderConfig)
     transformer: TransformerConfig = field(default_factory=TransformerConfig)
-    video_feature_dim: int = 1024  # metaclip dim
     num_anchors: int = 3
     anchor_embedding_dim: int = 128
     imagebind_config: ImageBindRankerConfig = field(

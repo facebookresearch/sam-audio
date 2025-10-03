@@ -1,7 +1,8 @@
 import unittest
 
 from sam_audio.model.config import (
-    SAM_AUDIO_CONFIGS,
+    SAMAudioConfig,
+    TransformerConfig,
     deserialize_config,
     serialize_config,
 )
@@ -9,7 +10,7 @@ from sam_audio.model.config import (
 
 class TestConfig(unittest.TestCase):
     def test_serialization(self):
-        config = SAM_AUDIO_CONFIGS["base-pe"]
+        config = SAMAudioConfig(transformer=TransformerConfig(n_layers=100))
         self.assertEqual(deserialize_config(serialize_config(config)), config)
 
 

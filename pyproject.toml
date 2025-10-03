@@ -36,6 +36,7 @@ lint.select=[
 lint.ignore = [
     "E501",
     "E731",
+    "C901",
 ]
 
 [project.urls]

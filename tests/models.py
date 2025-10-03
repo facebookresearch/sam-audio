@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from unittest import mock
 
 import torch
+from audiobox.models.ema import EMA
 from audiobox.models.transformer_layers.modules.inner_attention.flash_attention2 import (
     FlashAttentionSDPA,
     FlashCrossAttentionSDPA,
@@ -12,6 +13,13 @@ from audiobox.models.transformer_layers.modules.inner_attention.scaled_dot_produ
 )
 
 MODELS = {}
+
+
+def get_transformer(ab_model):
+    if isinstance(ab_model.method.model, EMA):
+        return ab_model.method.model.model
+    else:
+        return ab_model.method.model
 
 
 @contextmanager
@@ -37,6 +45,7 @@ def replace_flash_attn(module):
 
 def get_model(name, additional_overrides=None):
     JUDGE_CHECKPOINT = "/home/mattle/checkpoints/separation/samjudge/v2/runs/peaudio_large_300hrs_base_regression_joint_posttrain/runs/2025-09-18-20-41-51/lightning_logs/version_0/checkpoints/epoch-000_step-100000.ckpt"
+    SAM_CHECKPOINT = "/home/mattle/checkpoints/separation/demo/models/vts_20250915/visual_1b_20250915/visual_1b_20250915.ckpt"
 
     additional_overrides = additional_overrides or []
     if name in MODELS:
@@ -44,10 +53,6 @@ def get_model(name, additional_overrides=None):
     if name == "audiobox":
         import configs.resolvers  # noqa F401
         from audiobox.e2e.e2e import SeparationE2EModel
-
-        checkpoint_path = (
-            "/home/mattle/checkpoints/separation/demo/models/vts_20250826/model.ckpt"
-        )
 
         overrides = [
             "data.feature_extractor.repository=/home/mattle/checkpoints/dacvae/vae_large_scale_pretrain_v2_48000_hop1920_ld128/100k/dacvae",
@@ -58,7 +63,7 @@ def get_model(name, additional_overrides=None):
         ] + additional_overrides
         model = SeparationE2EModel(
             device=torch.device("cuda"),
-            audio_checkpoint=checkpoint_path,
+            audio_checkpoint=SAM_CHECKPOINT,
             overrides=overrides,
             precision="bf16",
             vocoder_checkpoint="/home/mattle/checkpoints/dacvae/vae_large_scale_pretrain_v2_48000_hop1920_ld128/100k/dacvae/weights.pth",
@@ -71,17 +76,8 @@ def get_model(name, additional_overrides=None):
     elif name == "sam":
         from sam_audio.model.model import SAMAudio
 
-        checkpoint_path = (
-            "/home/mattle/checkpoints/separation/demo/models/vts_mitigated_v1/oss.ckpt"
-        )
-        config = "base"
-        checkpoint_path = (
-            "/home/mattle/checkpoints/separation/demo/models/vts_20250826/oss.pth"
-        )
-        config = "base-pe"
-
-        model = SAMAudio.from_config(
-            config, pretrained=True, checkpoint_path=checkpoint_path
+        model = SAMAudio.from_pretrained(
+            os.path.join(os.path.dirname(SAM_CHECKPOINT), "hf")
         )
         model = model.to("cuda").eval()
         MODELS[name] = model

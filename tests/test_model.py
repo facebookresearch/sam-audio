@@ -8,7 +8,7 @@ from audiobox.e2e.use_case.audio_editing import Separation
 
 from sam_audio.inputs import batch_audio
 from sam_audio.model.model import DFLT_ODE_OPT
-from tests.models import get_model
+from tests.models import get_model, get_transformer
 
 
 class TestAlignInputs(unittest.TestCase):
@@ -26,9 +26,10 @@ class TestAlignInputs(unittest.TestCase):
         time = torch.tensor([0.5], device="cuda")
         ali_inp = torch.rand(1, 250, 2048, device="cuda")
         cross_x = torch.rand(1, 125, 2048, device="cuda")
+        model = get_transformer(self.model)
 
         with torch.no_grad():
-            ab_output = self.model.method.model.model.model_forward(
+            ab_output = model.model_forward(
                 ali_inp=ali_inp, batch={}, memory=cross_x, time=time
             )
 

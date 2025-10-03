@@ -7,13 +7,13 @@ import re
 import configs.resolvers  # noqa
 import torch
 from audiobox.e2e.e2e import SeparationE2EModel
+from audiobox.models.ema import EMA
 from dac.model import dac
 from omegaconf import OmegaConf
 
 from sam_audio.model.config import (
-    MetaCLIPConfig,
-    PerceptionEncoderConfig,
     SAMAudioConfig,
+    TransformerConfig,
     serialize_config,
 )
 from sam_audio.model.model import SAMAudio
@@ -21,17 +21,13 @@ from sam_audio.model.model import SAMAudio
 
 def main(audiobox_path: str):
     cfg = OmegaConf.load(os.path.join(os.path.dirname(audiobox_path), "config.yaml"))
-
     video_encoder = cfg.data.batch_feature_extractors[0]._target_.split(".")[-1]
-    vision_encoder_config = PerceptionEncoderConfig()
-
     extra_overrides = []
     if video_encoder == "MetaCLIPVideoExtractor":
         extra_overrides = [
             "data.batch_feature_extractors.0.pretrained=/home/mattle/checkpoints/metaclip/v2/metaclipv2_h14_genai.pt",
             "data.batch_feature_extractors.0.cache_dir=/home/mattle/.cache/openclip",
         ]
-        vision_encoder_config = MetaCLIPConfig()
 
     overrides = [
         "data.feature_extractor.repository=/home/mattle/checkpoints/dacvae/vae_large_scale_pretrain_v2_48000_hop1920_ld128/100k/dacvae",
@@ -78,32 +74,35 @@ def main(audiobox_path: str):
         else:
             return re.sub(r"^encoder\.", "", key)
 
+    if isinstance(ab_model.method.model, EMA):
+        model = ab_model.method.model.model
+    else:
+        model = ab_model.method.model
+
     checkpoint.update(
         {
             # Note, we filter out the _ema parameters, since `SeparationE2EModel` calls .eval(), copying the ema params to the main params
             **{
                 remap_audio_encoder(k): v
-                for k, v in ab_model.method.model.model.model.state_dict().items()
+                for k, v in model.model.state_dict().items()
                 if not k.endswith("_ema")
             },
             # aligned input projection layer
             **{
                 "proj." + k: v
-                for k, v in ab_model.method.model.model.data_proj.state_dict().items()
+                for k, v in model.data_proj.state_dict().items()
                 if not k.endswith("_ema")
             },
             # memory encoder
             **{
                 k.replace("proj", "memory_proj"): v
-                for k, v in ab_model.method.model.model.memory_encoders[0]
-                .state_dict()
-                .items()
+                for k, v in model.memory_encoders[0].state_dict().items()
                 if not k.endswith("_ema")
             },
         }
     )
 
-    for module in ab_model.method.model.model.time_aligned_encoders:
+    for module in model.time_aligned_encoders:
         sd = module.state_dict()
         if len(sd) == 0:
             continue
@@ -133,7 +132,14 @@ def main(audiobox_path: str):
                 }
             )
 
-    config = SAMAudioConfig(vision_encoder=vision_encoder_config)
+    config = SAMAudioConfig(
+        in_channels=model.in_channels,
+        transformer=TransformerConfig(
+            dim=model.d_model,
+            n_heads=model.nhead,
+            n_layers=model.num_layers,
+        ),
+    )
 
     output_path = os.path.join(os.path.dirname(audiobox_path), "hf/checkpoint.pt")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
