@@ -4,7 +4,8 @@ from unittest.mock import patch
 
 import torch
 import torchaudio
-from models import get_model
+
+from tests.models import get_model
 
 
 class TestJudge(unittest.TestCase):

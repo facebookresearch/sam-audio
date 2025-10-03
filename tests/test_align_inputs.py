@@ -5,7 +5,6 @@ import torch
 import torchaudio
 from audiobox.e2e.use_case.audio_editing import Separation
 
-from sam_audio.inputs import prepare_inputs
 from tests.models import get_model, get_transformer
 
 
@@ -36,8 +35,8 @@ class TestAlignInputs(unittest.TestCase):
                 {**batch, "noisy_x": noise}
             )
 
-        sam_batch = prepare_inputs(
-            [description], [file], self.sam.audio_codec.wav_idx_to_feature_idx
+        sam_batch = self.sam.get_transform()(
+            descriptions=[description], audio_paths=[file]
         )
         sam_batch = sam_batch.to("cuda")
         with torch.no_grad():
@@ -54,6 +53,7 @@ class TestAlignInputs(unittest.TestCase):
         self.assertTrue(torch.allclose(aligned_input, sam_aligned_input, atol=1e-5))
 
     def test_video_separation(self):
+        torch.manual_seed(0)
         file = os.path.join(
             self.dir, "data/702459_6464538-hq_690345_1453392-hq_snr-3.0.wav"
         )
@@ -77,21 +77,19 @@ class TestAlignInputs(unittest.TestCase):
                 {**batch, "noisy_x": noise}
             )
 
-        sam_batch = prepare_inputs(
-            [description],
-            [file],
-            self.sam.audio_codec.wav_idx_to_feature_idx,
+        sam_batch = self.sam.get_transform()(
+            descriptions=[description],
+            audio_paths=[file],
             video_paths=[video_file],
         )
         sam_batch = sam_batch.to("cuda")
         with torch.no_grad():
-            video_features = batch["video_features"]["data"]
-            video_mask_features = batch["video_mask_features"]["data"]
+            forward_args = self.sam._get_forward_args(sam_batch)
             sam_aligned_input = self.sam.align_inputs(
                 noisy_audio=noise.transpose(1, 2),
                 audio_features=batch["edit_audio_embedding"]["seq"],
-                video_features=video_features,
-                video_mask_features=video_mask_features,
+                video_features=forward_args["video_features"],
+                video_mask_features=forward_args["video_mask_features"],
                 anchor_ids=sam_batch.anchor_ids,
                 anchor_alignment=sam_batch.anchor_alignment,
             )

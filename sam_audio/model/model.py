@@ -89,9 +89,9 @@ class SAMAudio(BaseModel):
 
         self.proj = torch.nn.Linear(cfg.in_channels, cfg.transformer.dim)
 
-        self.align_video = AlignModalities(cfg.video_feature_dim, cfg.transformer.dim)
+        self.align_video = AlignModalities(cfg.vision_encoder.dim, cfg.transformer.dim)
         self.align_masked_video = AlignModalities(
-            cfg.video_feature_dim, cfg.transformer.dim
+            cfg.vision_encoder.dim, cfg.transformer.dim
         )
         self.embed_anchors = EmbedAnchors(
             cfg.num_anchors, cfg.anchor_embedding_dim, cfg.transformer.dim
@@ -119,8 +119,8 @@ class SAMAudio(BaseModel):
 
         projected = self.proj(x)
         aligned = self.align_video(projected, video_features)
-        aligned = self.align_masked_video(aligned, video_mask_features)
         aligned = self.embed_anchors(aligned, anchor_ids, anchor_alignment)
+        aligned = self.align_masked_video(aligned, video_mask_features)
         return aligned
 
     def forward(
@@ -180,7 +180,9 @@ class SAMAudio(BaseModel):
 
     def get_transform(self):
         return partial(
-            prepare_inputs, wav_to_feature_idx=self.audio_codec.wav_idx_to_feature_idx
+            prepare_inputs,
+            wav_to_feature_idx=self.audio_codec.wav_idx_to_feature_idx,
+            feature_to_wav_idx=self.audio_codec.feature_idx_to_wav_idx,
         )
 
     def _get_audio_features(self, audios: torch.Tensor):
@@ -227,6 +229,8 @@ class SAMAudio(BaseModel):
         if noise is None:
             noise = torch.randn_like(audio_features)
 
+        noise = audio_features + noise
+
         def vector_field(t, noisy_audio):
             res = self.forward(
                 noisy_audio=noisy_audio,
@@ -235,13 +239,13 @@ class SAMAudio(BaseModel):
             )
             return res
 
-        generated_features = odeint(
+        states = odeint(
             vector_field,
             noise,
             torch.tensor([0.0, 1.0], device=noise.device),
             **ode_opt,
-        )[-1].transpose(1, 2)
-
+        )
+        generated_features = states[-1].transpose(1, 2)
         # generated_features has shape [B, 2C, T].  Reshape to stack along the batch dimension
         wavs = self.audio_codec.decode(generated_features.view(2 * B, C, T)).view(
             B, 2, -1
@@ -263,3 +267,6 @@ class SAMAudio(BaseModel):
                 raise RuntimeError(
                     f"Missing keys: {missing_keys}, unexpected_keys: {unexpected_keys}"
                 )
+
+
+__all__ = ["SAMAudio"]

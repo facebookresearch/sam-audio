@@ -3,9 +3,7 @@ from typing import Callable, List, Optional, Tuple
 
 import decord
 import torch
-import torch.nn.functional as F
 import torchaudio
-from einops import rearrange
 from torch.nn.utils.rnn import pad_sequence
 
 
@@ -64,16 +62,23 @@ def mask_from_sizes(sizes: torch.Tensor) -> torch.Tensor:
 Anchor = Tuple[str, float, float]
 
 
-def load_video(sizes: torch.Tensor, video_paths: List[str], fps: Optional[int] = None):
+def load_video(
+    sizes: torch.Tensor,
+    video_paths: List[str],
+    feature_idx_to_wav_idx: Callable[[torch.Tensor], torch.Tensor],
+    audio_sampling_rate: int,
+):
     video = []
     for size, video_path in zip(sizes, video_paths):
         vr = decord.VideoReader(video_path, height=336, width=336)
-        frames = vr[:]
-        T, H, W, C = frames.shape
-        interpolated = F.interpolate(
-            rearrange(frames, "t h w c -> c (h w) t"), size=size, mode="nearest"
+        audio_timestamps = (
+            feature_idx_to_wav_idx(torch.arange(size)) / audio_sampling_rate
         )
-        video.append(rearrange(interpolated, "c (h w) t -> t c h w", h=H, w=W))
+        video_timestamps = torch.from_numpy(vr.get_frame_timestamp(range(len(vr))))
+        diffs = (audio_timestamps[None] - video_timestamps[:, [0]]).abs()
+        frame_idxs = diffs.argmin(dim=0)
+        frames = vr.get_batch(frame_idxs.numpy())
+        video.append(frames.permute(0, 3, 1, 2))
     return video
 
 
@@ -81,6 +86,7 @@ def prepare_inputs(
     descriptions: list[str],
     audio_paths: list[str],
     wav_to_feature_idx: Callable[[torch.Tensor], torch.Tensor],
+    feature_to_wav_idx: Callable[[torch.Tensor], torch.Tensor],
     audio_sampling_rate: int = 48_000,
     anchors: Optional[list[list[Anchor]]] = None,
     video_paths: Optional[list[str]] = None,
@@ -138,9 +144,11 @@ def prepare_inputs(
 
     video = video_mask = None
     if video_paths is not None:
-        video = load_video(sizes, video_paths)
+        video = load_video(sizes, video_paths, feature_to_wav_idx, audio_sampling_rate)
     if video_mask_paths is not None:
-        video_mask = load_video(sizes, video_mask_paths)
+        video_mask = load_video(
+            sizes, video_mask_paths, feature_to_wav_idx, audio_sampling_rate
+        )
 
     return Batch(
         audios=audios,

@@ -4,7 +4,6 @@ import unittest
 import torchaudio
 from audiobox.e2e.use_case.audio_editing import Separation
 
-from sam_audio.inputs import prepare_inputs
 from tests.models import get_model
 
 
@@ -26,10 +25,9 @@ class TestInput(unittest.TestCase):
             input_paths=[file], descriptions=[description], mask_times=[mask_times]
         )
         batch = next(use_case.prepare_batch(self.model.method, None, self.model.dset))
-        res = prepare_inputs(
+        res = self.sam.get_transform()(
             descriptions=[description],
             audio_paths=[file],
-            wav_to_feature_idx=self.sam.audio_codec.wav_idx_to_feature_idx,
         )
         diff = (
             res.audios
@@ -54,11 +52,10 @@ class TestInput(unittest.TestCase):
         )
         batch = next(use_case.prepare_batch(self.model.method, None, self.model.dset))
 
-        res = prepare_inputs(
+        res = self.sam.get_transform()(
             descriptions=[description],
             audio_paths=[file],
             video_paths=[video_file],
-            wav_to_feature_idx=self.model.dset.feature_extractor.wav_idx_to_feature_idx,
         )
         diff = (
             res.audios
