@@ -146,6 +146,7 @@ class TestAlignInputs(unittest.TestCase):
         self.assertLess(diff.max(), 1e-4)
 
     def check_wav(self, generated, hyp, places=2):
+        generated = generated[None]
         diff = (generated - hyp).abs()
         corr = torch.corrcoef(torch.cat([generated, hyp]))
         self.assertAlmostEqual(diff.max().item(), 0, places=places)

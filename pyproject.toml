@@ -12,16 +12,20 @@ dependencies = [
     "decord",
     "einops",
     "numpy",
-    "open_clip_torch",
     "torch",
     "torchaudio",
     "torchdiffeq",
     "torchvision",
     "transformers>=4.54.0",
-    "perception-models@git+https://github.com/facebookresearch/perception_models",
-    "imagebind@git+https://github.com/facebookresearch/ImageBind.git",
+    "perception-models@git+https://github.com/facebookresearch/perception_models@unpin-deps",
 ]
 
+[project.optional-dependencies]
+
+reranking = [
+    "imagebind@git+https://github.com/facebookresearch/ImageBind.git",
+    "laion-clap",
+]
 
 [tool.ruff]
 

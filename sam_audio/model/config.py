@@ -21,6 +21,8 @@ def serialize_config(cfg):
             "_target_": cls_name,
             **{k: serialize_config(v) for k, v in cfg.__dict__.items()},
         }
+    elif isinstance(cfg, list):
+        return [serialize_config(x) for x in cfg]
     return cfg
 
 
@@ -126,11 +128,38 @@ class TransformerConfig:
     no_cross_attention: bool = False
 
 
+@dataclass(kw_only=True)
+class RankerConfig: ...
+
+
 @config(kw_only=True)
-class ImageBindRankerConfig:
+class ImageBindRankerConfig(RankerConfig):
     checkpoint: Optional[str] = (
         None  # Optional local checkpoint, otherwise download from internet
     )
+
+
+@config(kw_only=True)
+class ClapRankerConfig(RankerConfig):
+    checkpoint: Optional[str] = (
+        None  # Optional local checkpoint, otherwise download from internet
+    )
+
+
+@config(kw_only=True)
+class JudgeRankerConfig(RankerConfig):
+    checkpoint_or_model_id: str = "facebook/sam-audio-judge"
+
+
+@config(kw_only=True)
+class EnsembleRankerConfig(RankerConfig):
+    rankers: list[RankerConfig] = field(
+        default_factory=lambda: [
+            ClapRankerConfig(),
+            JudgeRankerConfig(),
+        ]
+    )
+    weights: list[float] = field(default_factory=lambda: [5.0, 1.0])
 
 
 @config(kw_only=True)
@@ -142,6 +171,5 @@ class SAMAudioConfig:
     transformer: TransformerConfig = field(default_factory=TransformerConfig)
     num_anchors: int = 3
     anchor_embedding_dim: int = 128
-    imagebind_config: ImageBindRankerConfig = field(
-        default_factory=ImageBindRankerConfig
-    )
+    visual_ranker: ImageBindRankerConfig = field(default_factory=ImageBindRankerConfig)
+    text_ranker: EnsembleRankerConfig = field(default_factory=EnsembleRankerConfig)

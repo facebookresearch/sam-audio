@@ -1,4 +1,5 @@
 import math
+import re
 from dataclasses import asdict, dataclass
 from functools import partial
 from typing import Any, Dict, Optional
@@ -18,6 +19,7 @@ from sam_audio.model.config import (
 from sam_audio.model.text_encoder import T5TextEncoder
 from sam_audio.model.transformer import DiT
 from sam_audio.model.vision_encoder import MetaCLIPEncoder, PerceptionEncoder
+from sam_audio.ranking import create_ranker
 
 DFLT_ODE_OPT = {"method": "midpoint", "options": {"step_size": 2 / 32}}
 
@@ -98,6 +100,8 @@ class SAMAudio(BaseModel):
         )
         self.memory_proj = torch.nn.Linear(cfg.text_encoder.dim, cfg.transformer.dim)
         self.timestep_emb = SinusoidalEmbedding(cfg.transformer.dim)
+        self.visual_ranker = create_ranker(cfg.visual_ranker)
+        self.text_ranker = create_ranker(cfg.text_ranker)
 
     def align_inputs(
         self,
@@ -196,21 +200,39 @@ class SAMAudio(BaseModel):
         else:
             return self.vision_encoder(video).transpose(1, 2)
 
-    def _get_forward_args(self, batch: Batch):
+    def _repeat_for_reranking(self, tensor, candidates):
+        if candidates > 1:
+            B = tensor.size(0)
+            rest = tensor.shape[1:]
+            return (
+                tensor.unsqueeze(1)
+                .expand(B, candidates, *rest)
+                .reshape(B * candidates, *rest)
+            )
+        else:
+            return tensor
+
+    def _get_forward_args(self, batch: Batch, candidates: int = 1):
         audio_features = self._get_audio_features(batch.audios)
         text_features, text_mask = self.text_encoder(batch.descriptions)
         video_features = self._get_video_features(batch.video, audio_features)
         video_mask_features = self._get_video_features(batch.video_mask, audio_features)
 
         return {
-            "audio_features": audio_features,
-            "text_features": text_features,
-            "text_mask": text_mask,
-            "video_features": video_features,
-            "video_mask_features": video_mask_features,
-            "anchor_ids": batch.anchor_ids,
-            "anchor_alignment": batch.anchor_alignment,
-            "audio_pad_mask": batch.audio_pad_mask,
+            "audio_features": self._repeat_for_reranking(audio_features, candidates),
+            "text_features": self._repeat_for_reranking(text_features, candidates),
+            "text_mask": self._repeat_for_reranking(text_mask, candidates),
+            "video_features": self._repeat_for_reranking(video_features, candidates),
+            "video_mask_features": self._repeat_for_reranking(
+                video_mask_features, candidates
+            ),
+            "anchor_ids": self._repeat_for_reranking(batch.anchor_ids, candidates),
+            "anchor_alignment": self._repeat_for_reranking(
+                batch.anchor_alignment, candidates
+            ),
+            "audio_pad_mask": self._repeat_for_reranking(
+                batch.audio_pad_mask, candidates
+            ),
         }
 
     @torch.inference_mode()
@@ -219,9 +241,10 @@ class SAMAudio(BaseModel):
         batch: Batch,
         noise: Optional[torch.Tensor] = None,
         ode_opt: Dict[str, Any] = DFLT_ODE_OPT,
+        reranking_candidates: int = 1,
     ) -> SeparationResult:
         # Encode audio
-        forward_args = self._get_forward_args(batch)
+        forward_args = self._get_forward_args(batch, candidates=reranking_candidates)
         audio_features = forward_args["audio_features"]
         B, T, C = audio_features.shape
         C = C // 2  # we stack audio_features, so the actual channels is half
@@ -247,14 +270,56 @@ class SAMAudio(BaseModel):
         )
         generated_features = states[-1].transpose(1, 2)
         # generated_features has shape [B, 2C, T].  Reshape to stack along the batch dimension
-        wavs = self.audio_codec.decode(generated_features.view(2 * B, C, T)).view(
+        wavs = self.audio_codec.decode(generated_features.reshape(2 * B, C, T)).view(
             B, 2, -1
         )
+
+        bsz = wavs.size(0) // reranking_candidates
+        sizes = self.audio_codec.feature_idx_to_wav_idx(batch.sizes)
+        target_wavs = self.unbatch_wavs(
+            wavs[:, 0].view(bsz, reranking_candidates, -1), sizes
+        )
+        residual_wavs = self.unbatch_wavs(
+            wavs[:, 1].view(bsz, reranking_candidates, -1), sizes
+        )
+
+        if (
+            reranking_candidates > 1
+            and batch.video_paths is not None
+            and self.visual_ranker is not None
+        ):
+            scores = self.visual_ranker(
+                extracted_audio=target_wavs,
+                video_paths=batch.video_paths,
+                sample_rate=self.audio_codec.sample_rate,
+            )
+            idxs = scores.argmax(dim=1)
+        elif reranking_candidates > 1 and self.text_ranker is not None:
+            input_audio = [
+                audio[:, :size].expand(reranking_candidates, -1)
+                for audio, size in zip(batch.audios, sizes)
+            ]
+            scores = self.text_ranker(
+                extracted_audio=target_wavs,
+                input_audio=input_audio,
+                descriptions=batch.descriptions,
+                sample_rate=self.audio_codec.sample_rate,
+            )
+            idxs = scores.argmax(dim=1)
+        else:
+            idxs = torch.zeros(bsz, dtype=torch.long, device=noise.device)
+
         return SeparationResult(
-            target=wavs[:, [0]],
-            residual=wavs[:, [1]],
+            target=[wav[idx] for wav, idx in zip(target_wavs, idxs)],
+            residual=[wavs[idx] for wavs, idx in zip(residual_wavs, idxs)],
             noise=noise,
         )
+
+    def unbatch_wavs(self, wavs: torch.Tensor, sizes: torch.Tensor):
+        result = []
+        for row, size in zip(wavs, sizes):
+            result.append(row.narrow(dim=-1, start=0, length=size))
+        return result
 
     def load_state_dict(self, state_dict, strict=True):
         if strict:
@@ -262,7 +327,8 @@ class SAMAudio(BaseModel):
                 state_dict, strict=False
             )
             # We load this directly from HF, not in checkpoint
-            missing_keys = [x for x in missing_keys if not x.startswith("text_encoder")]
+            skip_regex = re.compile("(^text_encoder|^visual_ranker|^text_ranker)")
+            missing_keys = [x for x in missing_keys if not re.search(skip_regex, x)]
             if len(missing_keys) > 0 or len(unexpected_keys) > 0:
                 raise RuntimeError(
                     f"Missing keys: {missing_keys}, unexpected_keys: {unexpected_keys}"

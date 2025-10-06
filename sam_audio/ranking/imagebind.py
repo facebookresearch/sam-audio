@@ -93,9 +93,21 @@ class ImageBindRanker(Ranker):
         self.model = self.model.eval()
 
     @torch.inference_mode()
-    def forward(self, audio: torch.Tensor, video_paths: str, sample_rate: int = 48_000):
-        video_data = load_and_transform_video_data([video_paths], device=audio.device)
-        audio_data = load_and_transform_audio_data(audio, input_sample_rate=sample_rate)
+    def forward(
+        self,
+        extracted_audio: list[torch.Tensor],
+        video_paths: list[str],
+        sample_rate: int = 48_000,
+        **kwargs,
+    ):
+        audio_data = torch.cat(
+            [
+                load_and_transform_audio_data(x, input_sample_rate=sample_rate)
+                for x in extracted_audio
+            ],
+            dim=0,
+        )
+        video_data = load_and_transform_video_data(video_paths, audio_data.device)
 
         inputs = {ModalityType.AUDIO: audio_data, ModalityType.VISION: video_data}
         embs = self.model(inputs)
@@ -104,5 +116,7 @@ class ImageBindRanker(Ranker):
             audio_embs / ((audio_embs**2).sum(dim=-1, keepdims=True) ** 0.5),
             video_embs / ((video_embs**2).sum(dim=-1, keepdims=True) ** 0.5),
         )
-        scores = (audio_embs * video_embs).sum(dim=-1)
+        bsz = len(extracted_audio)
+        candidates = len(audio_embs) // bsz
+        scores = audio_embs.view(bsz, candidates, -1) @ video_embs.view(bsz, -1, 1)
         return scores
