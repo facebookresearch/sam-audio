@@ -156,23 +156,6 @@ def main(audiobox_path: str):
 
     ab_model = get_model("audiobox-judge")
 
-    def remap_audio_encoder(key, prefix="audio_encoder."):
-        res = prefix + re.sub(r"^model\.", "", key)  # rename top level module
-
-        # We remove GroupedLayers
-        match = re.search(r"layers\.(\d+)\.layers\.(\d+)\.", res)
-        if match:
-            layers_per_group = (
-                ab_model.model.modality_encoders.audio_understanding.layer_grouping
-            )
-            level1 = int(match.group(1))
-            level2 = int(match.group(2))
-            new_level = layers_per_group * level1 + level2
-            res = re.sub(
-                r"layers\.(\d+)\.layers\.(\d+)\.", f"layers.{new_level}.", res
-            )  # remove `GroupedLayers`
-        return res
-
     checkpoint = {
         **checkpoint,
         # audio understanding modality encoder

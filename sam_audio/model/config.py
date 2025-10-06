@@ -145,29 +145,3 @@ class SAMAudioConfig:
     imagebind_config: ImageBindRankerConfig = field(
         default_factory=ImageBindRankerConfig
     )
-
-
-@config(kw_only=True)
-class JudgeConfig:
-    audio_codec: DACVAEConfig = field(default_factory=DACVAEConfig)
-    text_encoder: ModernBERTConfig = field(default_factory=ModernBERTConfig)
-    audio_encoder: TransformerConfig = field(
-        default_factory=lambda: TransformerConfig(
-            dim=1792,
-            out_channels=1792,
-            in_channels=128,
-            n_heads=14,
-            n_layers=28,
-            no_cross_attention=True,
-        )
-    )
-    finetune_encoder: TransformerConfig = field(
-        default_factory=lambda: TransformerConfig(
-            dim=192,
-            out_channels=192,
-            in_channels=256,
-            n_heads=3,
-            n_layers=6,
-            no_cross_attention=True,
-        )
-    )
