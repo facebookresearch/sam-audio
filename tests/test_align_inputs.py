@@ -35,9 +35,7 @@ class TestAlignInputs(unittest.TestCase):
                 {**batch, "noisy_x": noise}
             )
 
-        sam_batch = self.sam.get_transform()(
-            descriptions=[description], audio_paths=[file]
-        )
+        sam_batch = self.sam.get_transform()(descriptions=[description], audios=[file])
         sam_batch = sam_batch.to("cuda")
         with torch.no_grad():
             video_features = batch["video_features"]["data"]
@@ -79,7 +77,7 @@ class TestAlignInputs(unittest.TestCase):
 
         sam_batch = self.sam.get_transform()(
             descriptions=[description],
-            audio_paths=[file],
+            audios=[file],
             video_paths=[video_file],
         )
         sam_batch = sam_batch.to("cuda")

@@ -103,6 +103,10 @@ class SAMAudio(BaseModel):
         self.visual_ranker = create_ranker(cfg.visual_ranker)
         self.text_ranker = create_ranker(cfg.text_ranker)
 
+    @property
+    def sample_rate(self):
+        return self.audio_codec.sample_rate
+
     def align_inputs(
         self,
         noisy_audio,
