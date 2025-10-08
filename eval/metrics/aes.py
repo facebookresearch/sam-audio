@@ -34,7 +34,7 @@ class Aesthetic(torch.nn.Module):
     ) -> dict[str, list[float]]:
         result = self.model.forward(
             [
-                {"wav": wav, "sample_rate": target_wavs_sample_rate}
+                {"wav": wav[None], "sample_rate": target_wavs_sample_rate}
                 for wav in target_wavs
             ]
         )

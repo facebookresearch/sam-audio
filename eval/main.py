@@ -18,7 +18,7 @@ DSETS = {"musdb": MUSDB}
 
 def gather_and_average_results(results, world_size):
     if world_size == 1:
-        return results.mean().to_json()
+        return json.loads(results.mean().to_json())
 
     # 1. Gather all dictionaries to all ranks
     all_results = [None for _ in range(world_size)]
@@ -30,7 +30,7 @@ def gather_and_average_results(results, world_size):
     counts = 0
 
     for res in all_results:
-        for k, v in res["sum"].items():
+        for k, v in json.loads(res["sum"]).items():
             if k not in summed:
                 summed[k] = 0.0
             summed[k] += v
@@ -87,8 +87,9 @@ def main(
         batch = batch.to(device)
         result = model.separate(batch)
         mets = {}
+        sizes = model.audio_codec.feature_idx_to_wav_idx(batch.sizes)
         for metric in all_metrics:
-            input_wavs = model.unpad(batch.audios, batch.sizes)
+            input_wavs = model.unbatch_wavs(batch.audios.squeeze(1), sizes)
             mets.update(
                 metric(
                     target_wavs=result.target,
@@ -102,11 +103,10 @@ def main(
 
     df = pd.concat(dfs)
     averaged_results = gather_and_average_results(df, world_size)
-    print(
-        json.dumps(
-            {k: f"{v:.2f}" for k, v in averaged_results.to_json().items()}, indent=4
+    if rank == 0:
+        print(
+            json.dumps({k: f"{v:.2f}" for k, v in averaged_results.items()}, indent=4)
         )
-    )
 
 
 if __name__ == "__main__":

@@ -27,6 +27,12 @@ reranking = [
     "laion-clap",
 ]
 
+eval = [
+    "audiobox_aesthetics",
+    "imagebind@git+https://github.com/facebookresearch/ImageBind.git",
+    "laion-clap",
+]
+
 [tool.ruff]
 
 lint.select=[

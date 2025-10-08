@@ -30,7 +30,7 @@ class CLAP(torch.nn.Module):
             file_list = []
             for i, wav in enumerate(target_wavs):
                 file_list.append(f"{tdir}/hyp_{i}.wav")
-                torchaudio.save(file_list[-1], wav.cpu(), target_wavs_sample_rate)
+                torchaudio.save(file_list[-1], wav.cpu()[None], target_wavs_sample_rate)
             audio_embs = self.model.get_audio_embedding_from_filelist(
                 file_list, use_tensor=True
             )
