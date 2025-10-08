@@ -2,7 +2,6 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import asdict
 from typing import Union
 
-import numpy as np
 import torch
 from dac.model import dac
 
@@ -79,6 +78,6 @@ class DACVAE(Codec):
             sample_rate = self.sample_rate
         orig_freq = sample_rate
         new_freq = self.sample_rate
-        target_length = np.ceil(new_freq * wav_idx / orig_freq)
-        res = np.ceil(target_length / self.hop_length)
+        target_length = torch.ceil(new_freq * wav_idx / orig_freq)
+        res = torch.ceil(target_length / self.hop_length)
         return self.cast_to_int(res)

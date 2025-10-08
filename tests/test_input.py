@@ -27,7 +27,7 @@ class TestInput(unittest.TestCase):
         batch = next(use_case.prepare_batch(self.model.method, None, self.model.dset))
         res = self.sam.get_transform()(
             descriptions=[description],
-            audio_paths=[file],
+            audios=[file],
         )
         diff = (
             res.audios
@@ -54,7 +54,7 @@ class TestInput(unittest.TestCase):
 
         res = self.sam.get_transform()(
             descriptions=[description],
-            audio_paths=[file],
+            audios=[file],
             video_paths=[video_file],
         )
         diff = (

@@ -84,7 +84,7 @@ def load_video(
 
 def prepare_inputs(
     descriptions: list[str],
-    audio_paths: list[str],
+    audios: list[str],
     wav_to_feature_idx: Callable[[torch.Tensor], torch.Tensor],
     feature_to_wav_idx: Callable[[torch.Tensor], torch.Tensor],
     audio_sampling_rate: int = 48_000,
@@ -93,13 +93,13 @@ def prepare_inputs(
     video_mask_paths: Optional[list[str]] = None,
 ):
     decord.bridge.set_bridge("torch")
-    assert len(descriptions) == len(audio_paths)
+    assert len(descriptions) == len(audios)
     assert anchors is None or len(descriptions) == len(anchors)
     assert video_paths is None or len(descriptions) == len(video_paths)
 
     anchor_dict = {"<null>": 0, "+": 1, "-": 2, "<pad>": 3}
 
-    audios, wav_sizes = batch_audio(audio_paths, audio_sampling_rate)
+    audios, wav_sizes = batch_audio(audios, audio_sampling_rate)
 
     sizes = wav_to_feature_idx(wav_sizes)
     audio_pad_mask = mask_from_sizes(sizes)

@@ -54,7 +54,7 @@ class TestAlignInputs(unittest.TestCase):
 
         transform = self.sam.get_transform()
         sam_batch = transform(
-            descriptions=use_case.descriptions, audio_paths=use_case.input_paths
+            descriptions=use_case.descriptions, audios=use_case.input_paths
         ).to("cuda")
 
         with torch.no_grad():
@@ -105,7 +105,7 @@ class TestAlignInputs(unittest.TestCase):
         def forward(descriptions, paths, videos, video_masks, anchors, features, noise):
             batch = transform(
                 descriptions=descriptions,
-                audio_paths=paths,
+                audios=paths,
                 video_paths=videos,
                 video_mask_paths=video_masks,
                 anchors=anchors,
@@ -187,7 +187,7 @@ class TestAlignInputs(unittest.TestCase):
 
         batch = transform(
             descriptions=[description],
-            audio_paths=[file],
+            audios=[file],
         )
         batch = batch.to("cuda")
         use_case = Separation(
@@ -205,9 +205,7 @@ class TestAlignInputs(unittest.TestCase):
         mask_times = [0, info.num_frames / info.sample_rate]
         transform = self.sam.get_transform()
         anchors = [[["+", 0.567, 0.795], ["+", 3.173, 3.591]]]
-        batch = transform(
-            descriptions=[description], audio_paths=[file], anchors=anchors
-        )
+        batch = transform(descriptions=[description], audios=[file], anchors=anchors)
         batch = batch.to("cuda")
         use_case = Separation(
             input_paths=[file],
@@ -231,7 +229,7 @@ class TestAlignInputs(unittest.TestCase):
         anchors = [[["+", 0.567, 0.795], ["+", 3.173, 3.591]]]
         batch = transform(
             descriptions=[description],
-            audio_paths=[file],
+            audios=[file],
             anchors=anchors,
             video_paths=[video_file],
             video_mask_paths=[mask_file],
