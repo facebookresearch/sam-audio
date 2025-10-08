@@ -20,6 +20,9 @@ dependencies = [
     "perception-models@git+https://github.com/facebookresearch/perception_models@unpin-deps",
 ]
 
+[tool.setuptools.packages.find]
+where = ["sam_audio"]
+
 [project.optional-dependencies]
 
 reranking = [
