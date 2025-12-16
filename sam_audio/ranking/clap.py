@@ -2,22 +2,40 @@
 
 import torch
 import torchaudio
+from huggingface_hub import hf_hub_download
 
 from sam_audio.model.config import ClapRankerConfig
 from sam_audio.ranking.ranker import Ranker
 
 
+def get_model(device="cpu"):
+    import laion_clap
+
+    model = laion_clap.CLAP_Module(enable_fusion=False, amodel="HTSAT-tiny").to(device)
+    checkpoint_file = hf_hub_download(
+        repo_id="lukewys/laion_clap", filename="630k-best.pt"
+    )
+    state_dict = torch.load(checkpoint_file, map_location=device, weights_only=False)[
+        "state_dict"
+    ]
+    if next(iter(state_dict.items()))[0].startswith("module"):
+        state_dict = {k[7:]: v for k, v in state_dict.items()}
+
+    if "text_branch.embeddings.position_ids" in state_dict:
+        del state_dict["text_branch.embeddings.position_ids"]
+
+    model.model.load_state_dict(state_dict)
+    return model.eval()
+
+
 class ClapRanker(Ranker):
     def __init__(self, config: ClapRankerConfig):
-        import laion_clap
         from laion_clap.training import data
 
-        self.laion_data_modlue = data
+        self.laion_data_module = data
         super().__init__()
         self.config = config
-        self.model = laion_clap.CLAP_Module(enable_fusion=False, amodel="HTSAT-tiny")
-        self.model.load_ckpt(ckpt=config.checkpoint, model_id=0)
-        self.model = self.model.eval()
+        self.model = get_model()
 
     def _prepare_audio(self, audio, sample_rate):
         audio_features = []
@@ -27,17 +45,17 @@ class ClapRanker(Ranker):
                     candidates, sample_rate, 48000
                 )
 
-            quantized = self.laion_data_modlue.int16_to_float32_torch(
-                self.laion_data_modlue.float32_to_int16_torch(candidates)
+            quantized = self.laion_data_module.int16_to_float32_torch(
+                self.laion_data_module.float32_to_int16_torch(candidates)
             ).float()
             for sample in quantized:
                 temp_dict = {}
-                temp_dict = self.laion_data_modlue.get_audio_features(
+                temp_dict = self.laion_data_module.get_audio_features(
                     temp_dict,
                     sample,
                     480000,
                     data_truncating=(
-                        "fusion" if self.model.enable_fusion else "rand_trunc"
+                        "fusion" if self.model.model.enable_fusion else "rand_trunc"
                     ),
                     data_filling="repeatpad",
                     audio_cfg=self.model.model_cfg["audio_cfg"],

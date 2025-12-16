@@ -3,9 +3,10 @@
 from tempfile import TemporaryDirectory
 from typing import Optional
 
-import laion_clap
 import torch
 from torchcodec.encoders import AudioEncoder
+
+from sam_audio.ranking.clap import get_model
 
 
 class CLAP(torch.nn.Module):
@@ -15,11 +16,7 @@ class CLAP(torch.nn.Module):
         device: Optional[torch.device] = None,
     ):
         super().__init__()
-        self.model = laion_clap.CLAP_Module(
-            enable_fusion=False, amodel="HTSAT-tiny"
-        ).to(device)
-        self.model.load_ckpt(ckpt=checkpoint, model_id=0)
-        self.model = self.model.eval()
+        self.model = get_model(device)
         self.device = device or torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
