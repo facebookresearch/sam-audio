@@ -19,7 +19,7 @@ dependencies = [
     "audiobox_aesthetics",
     "einops",
     "imagebind@git+https://github.com/facebookresearch/ImageBind.git",
-    "laion-clap@git+https://github.com/LAION-AI/CLAP.git",
+    "laion-clap@git+https://github.com/lematt1991/CLAP.git",
     "numpy",
     "perception-models@git+https://github.com/facebookresearch/perception_models@unpin-deps",
     "pydub",
