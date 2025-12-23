@@ -135,3 +135,16 @@ See [contributing](CONTRIBUTING.md) and [code of conduct](CODE_OF_CONDUCT.md) fo
 ## License
 
 This project is licensed under the SAM License - see the [LICENSE](LICENSE) file for details.
+
+## Citing SAM Audio
+
+If you use SAM Audio in your research, please use the following BibTex entry:
+
+```bibtex
+@article{shi2025samaudio,
+    title={SAM Audio: Segment Anything in Audio},
+    author={Bowen Shi and Andros Tjandra and John Hoffman and Helin Wang and Yi-Chiao Wu and Luya Gao and Julius Richter and Matt Le and Apoorv Vyas and Sanyuan Chen and Christoph Feichtenhofer and Piotr Doll{\'a}r and Wei-Ning Hsu and Ann Lee},
+    year={2025},
+    url={https://arxiv.org/abs/2512.18099}
+}
+```
