@@ -71,7 +71,7 @@ torchaudio.save("residual.wav", result.residual.cpu(), sample_rate)  # Everythin
 
 SAM-Audio supports three types of prompts:
 
-1. **Text Prompting**: Describe the sound you want to isolate using natural language. To match training, please use lowercase and NP/VP format for text.
+1. **Text Prompting**: Describe the sound you want to isolate using natural language. To match training, please use lowercase NP/VP format for text.
    ```python
    processor(audios=[audio], descriptions=["man speaking"])
    ```
