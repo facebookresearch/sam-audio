@@ -19,7 +19,7 @@ SAM-Audio and the Judge model crucially rely on [Perception-Encoder Audio-Visual
 ## Setup
 
 **Requirements:**
-- Python >= 3.10
+- Python >= 3.11
 - CUDA-compatible GPU (recommended)
 
 Install dependencies:

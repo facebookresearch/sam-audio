@@ -13,7 +13,7 @@ authors = [
 
 readme = "README.md"
 license = { file="LICENSE" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "dacvae@git+https://github.com/facebookresearch/dacvae.git",
     "audiobox_aesthetics",
@@ -36,7 +36,7 @@ include = ["sam_audio*"]
 
 [tool.ruff]
 
-target-version = "py310"
+target-version = "py311"
 
 lint.select=[
     "B",
