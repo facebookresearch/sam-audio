@@ -79,8 +79,9 @@ class SAMAudio(BaseModel):
     def __init__(self, cfg: SAMAudioConfig):
         super().__init__()
         self.audio_codec = DACVAE(cfg.audio_codec)
-        self.text_encoder = T5TextEncoder(cfg.text_encoder)
-        self.vision_encoder = PerceptionEncoder(cfg.vision_encoder)
+        self.text_encoder = T5TextEncoder(cfg.text_encoder)  # base
+        # self.vision_encoder = PerceptionEncoder(cfg.vision_encoder)
+        self.vision_encoder_dim = cfg.vision_encoder.dim  # 1024
         self.transformer = DiT(cfg.transformer)
         self.proj = torch.nn.Linear(cfg.in_channels, cfg.transformer.dim)
         self.align_masked_video = AlignModalities(
@@ -91,15 +92,17 @@ class SAMAudio(BaseModel):
         )
         self.memory_proj = torch.nn.Linear(cfg.text_encoder.dim, cfg.transformer.dim)
         self.timestep_emb = SinusoidalEmbedding(cfg.transformer.dim)
-        self.visual_ranker = create_ranker(cfg.visual_ranker)
-        self.text_ranker = create_ranker(cfg.text_ranker)
-        if cfg.span_predictor is not None:
-            self.span_predictor = PEAudioFrame.from_config(
-                cfg.span_predictor, pretrained=True
-            )
-            self.span_predictor_transform = PEAudioFrameTransform.from_config(
-                cfg.span_predictor
-            )
+        self.visual_ranker = None  # create_ranker(cfg.visual_ranker)
+        self.text_ranker = None  # create_ranker(cfg.text_ranker)
+        self.span_predictor = None
+        self.span_predictor_transform = None
+        # if cfg.span_predictor is not None:
+        #     self.span_predictor = PEAudioFrame.from_config(
+        #         cfg.span_predictor, pretrained=True
+        #     )
+        #     self.span_predictor_transform = PEAudioFrameTransform.from_config(
+        #         cfg.span_predictor
+        #     )
 
     @property
     def sample_rate(self):
@@ -186,9 +189,9 @@ class SAMAudio(BaseModel):
     def _get_video_features(self, video, audio_features):
         B, T, _ = audio_features.shape
         if video is None:
-            return audio_features.new_zeros(B, self.vision_encoder.dim, T)
+            return audio_features.new_zeros(B, self.vision_encoder_dim, T)
         else:
-            return self.vision_encoder(video).transpose(1, 2)
+            raise Exception("Video not supported")
 
     def _repeat_for_reranking(self, tensor, candidates):
         if candidates > 1:
@@ -354,7 +357,7 @@ class SAMAudio(BaseModel):
             )
             missing_keys = [x for x in missing_keys if not re.search(skip_regex, x)]
             if len(missing_keys) > 0 or len(unexpected_keys) > 0:
-                raise RuntimeError(
+                print(
                     f"Missing keys: {missing_keys}, unexpected_keys: {unexpected_keys}"
                 )
 
