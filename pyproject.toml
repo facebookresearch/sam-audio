@@ -23,15 +23,16 @@ dependencies = [
     "numpy",
     "perception-models@git+https://github.com/facebookresearch/perception_models@unpin-deps",
     "pydub",
-    "torch",
+    "torch==2.6.0",
     "torchaudio",
-    "torchcodec",
+    "torchcodec==0.2",
     "torchdiffeq",
     "torchvision",
     "transformers>=4.54.0",
 ]
 
 [tool.setuptools.packages.find]
+where = ["."]
 include = ["sam_audio*"]
 
 [tool.ruff]
