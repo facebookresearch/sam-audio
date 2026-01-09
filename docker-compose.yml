@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  sam-audio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: pytorch/pytorch:2.2.0-cuda11.8-cudnn8-runtime
+    volumes:
+      - ./:/workspace
+      - ./models:/workspace/models
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+    # Use the GPU runtime if available. Requires Docker NVIDIA runtime or Compose v2 with GPUs support.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: ["python", "eval/main.py"]
