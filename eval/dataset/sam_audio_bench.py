@@ -5,12 +5,110 @@ from dataclasses import dataclass
 from io import BytesIO
 from typing import Optional, Tuple
 
+import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torchaudio
 from datasets import load_dataset
-from torchcodec.decoders import AudioDecoder, VideoDecoder
+
+
+def _load_audio_with_range(
+    path: str,
+    start_seconds: Optional[float] = None,
+    stop_seconds: Optional[float] = None,
+) -> Tuple[torch.Tensor, int]:
+    """Load audio from file and extract a time range.
+
+    Args:
+        path: Path to audio/video file.
+        start_seconds: Start time in seconds (None for beginning).
+        stop_seconds: End time in seconds (None for end).
+
+    Returns:
+        Tuple of (audio tensor, sample rate).
+    """
+    wav, sr = torchaudio.load(path)
+    if start_seconds is not None or stop_seconds is not None:
+        start_sample = int(start_seconds * sr) if start_seconds else 0
+        end_sample = int(stop_seconds * sr) if stop_seconds else wav.size(-1)
+        wav = wav[:, start_sample:end_sample]
+    return wav, sr
+
+
+def _load_video_frames_in_range(
+    path: str,
+    start_seconds: Optional[float] = None,
+    stop_seconds: Optional[float] = None,
+) -> torch.Tensor:
+    """Load video frames within a time range using OpenCV.
+
+    Args:
+        path: Path to video file.
+        start_seconds: Start time in seconds (None for beginning).
+        stop_seconds: End time in seconds (None for end).
+
+    Returns:
+        Video frames tensor in NCHW format.
+    """
+    cap = cv2.VideoCapture(path)
+    if not cap.isOpened():
+        raise ValueError(f"Could not open video file: {path}")
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    start_frame = int(start_seconds * fps) if start_seconds else 0
+    end_frame = int(stop_seconds * fps) if stop_seconds else total_frames
+
+    # Seek to start frame
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+
+    frames = []
+    for _ in range(end_frame - start_frame):
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_tensor = torch.from_numpy(frame_rgb).permute(2, 0, 1)  # HWC -> CHW
+        frames.append(frame_tensor)
+
+    cap.release()
+
+    if not frames:
+        raise ValueError(f"No frames found in range [{start_seconds}, {stop_seconds}] for video: {path}")
+
+    return torch.stack(frames)
+
+
+def _load_all_video_frames(path: str) -> torch.Tensor:
+    """Load all video frames using OpenCV.
+
+    Args:
+        path: Path to video file.
+
+    Returns:
+        Video frames tensor in NCHW format.
+    """
+    cap = cv2.VideoCapture(path)
+    if not cap.isOpened():
+        raise ValueError(f"Could not open video file: {path}")
+
+    frames = []
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_tensor = torch.from_numpy(frame_rgb).permute(2, 0, 1)
+        frames.append(frame_tensor)
+
+    cap.release()
+
+    if not frames:
+        raise ValueError(f"No frames found in video: {path}")
+
+    return torch.stack(frames)
 
 
 @dataclass
@@ -87,13 +185,12 @@ class SAMAudioBench(torch.utils.data.Dataset):
 
         mask = torch.from_numpy(np.load(BytesIO(item["mask_bytes"]))["video_masklet"])
 
-        video_decoder = VideoDecoder(video_path)
         if select_frames:
-            video_frames = video_decoder.get_frames_played_in_range(
-                item["start_offset"], item["end_offset"]
-            ).data
+            video_frames = _load_video_frames_in_range(
+                video_path, item["start_offset"], item["end_offset"]
+            )
         else:
-            video_frames = video_decoder[:].data
+            video_frames = _load_all_video_frames(video_path)
 
         if mask.size(0) != video_frames.size(0):
             # It's possible that the mask and the video frames differ by a small amount
@@ -128,20 +225,20 @@ class SAMAudioBench(torch.utils.data.Dataset):
         )
         assert os.path.exists(video_path), f"{video_path} does not exist!"
 
-        audio_decoder = AudioDecoder(video_path)
-        audio_samples = audio_decoder.get_samples_played_in_range(
-            start_seconds=item["start_offset"] if select_frames else 0,
-            stop_seconds=item["end_offset"] if select_frames else None,
+        start_seconds = item["start_offset"] if select_frames else 0
+        stop_seconds = item["end_offset"] if select_frames else None
+        audio_data, sample_rate = _load_audio_with_range(
+            video_path, start_seconds, stop_seconds
         )
 
-        if audio_samples.sample_rate != self.collate_fn.audio_sampling_rate:
+        if sample_rate != self.collate_fn.audio_sampling_rate:
             resampled_audio = torchaudio.functional.resample(
-                audio_samples.data,
-                audio_samples.sample_rate,
+                audio_data,
+                sample_rate,
                 self.collate_fn.audio_sampling_rate,
             )
         else:
-            resampled_audio = audio_samples.data
+            resampled_audio = audio_data
 
         masked_video_frames = self._get_masked_video(item, video_path, select_frames)
 

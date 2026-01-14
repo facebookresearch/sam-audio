@@ -2,11 +2,35 @@
 
 import os
 from subprocess import check_call
+from typing import Optional, Tuple
 
+import torch
 import torchaudio
 from datasets import load_dataset
 from torch.utils.data import Dataset
-from torchcodec.decoders import AudioDecoder
+
+
+def _load_audio_with_range(
+    path: str,
+    start_seconds: Optional[float] = None,
+    stop_seconds: Optional[float] = None,
+) -> Tuple[torch.Tensor, int]:
+    """Load audio from file and extract a time range.
+
+    Args:
+        path: Path to audio file.
+        start_seconds: Start time in seconds (None for beginning).
+        stop_seconds: End time in seconds (None for end).
+
+    Returns:
+        Tuple of (audio tensor, sample rate).
+    """
+    wav, sr = torchaudio.load(path)
+    if start_seconds is not None or stop_seconds is not None:
+        start_sample = int(start_seconds * sr) if start_seconds else 0
+        end_sample = int(stop_seconds * sr) if stop_seconds else wav.size(-1)
+        wav = wav[:, start_sample:end_sample]
+    return wav, sr
 
 
 def cache_file(url, outfile):
@@ -58,12 +82,12 @@ class MUSDB(Dataset):
         item = self.ds[idx]
         path = os.path.join(self.cache_path, "test", item["id"], "mixture.wav")
         assert os.path.exists(path), f"{path} does not exist!"
-        decoder = AudioDecoder(path)
-        data = decoder.get_samples_played_in_range(item["start_time"], item["end_time"])
-        wav = data.data
-        if data.sample_rate != self.sample_rate:
+        wav, sample_rate = _load_audio_with_range(
+            path, item["start_time"], item["end_time"]
+        )
+        if sample_rate != self.sample_rate:
             wav = torchaudio.functional.resample(
-                wav, data.sample_rate, self.sample_rate
+                wav, sample_rate, self.sample_rate
             )
         wav = wav.mean(0, keepdim=True)
         return wav, item["description"]

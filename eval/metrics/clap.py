@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 from typing import Optional
 
 import torch
-from torchcodec.encoders import AudioEncoder
+import torchaudio
 
 from sam_audio.ranking.clap import get_model
 
@@ -32,11 +32,8 @@ class CLAP(torch.nn.Module):
             file_list = []
             for i, wav in enumerate(target_wavs):
                 file_list.append(f"{tdir}/hyp_{i}.wav")
-                encoder = AudioEncoder(
-                    samples=wav.cpu()[None] if wav.ndim == 1 else wav.cpu(),
-                    sample_rate=target_wavs_sample_rate,
-                )
-                encoder.to_file(file_list[-1])
+                wav_to_save = wav.cpu()[None] if wav.ndim == 1 else wav.cpu()
+                torchaudio.save(file_list[-1], wav_to_save, target_wavs_sample_rate)
             audio_embs = self.model.get_audio_embedding_from_filelist(
                 file_list, use_tensor=True
             )

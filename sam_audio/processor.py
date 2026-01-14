@@ -6,11 +6,11 @@ import math
 import os
 from typing import Callable, List, Optional, Tuple
 
+import cv2
 import torch
 import torchaudio
 from huggingface_hub import hf_hub_download
 from torch.nn.utils.rnn import pad_sequence
-from torchcodec.decoders import AudioDecoder, VideoDecoder
 from transformers import AutoTokenizer, BatchFeature
 
 from sam_audio.model.config import SAMAudioConfig, SAMAudioJudgeConfig
@@ -18,6 +18,64 @@ from sam_audio.model.config import SAMAudioConfig, SAMAudioJudgeConfig
 logger = logging.getLogger(__name__)
 
 Anchor = Tuple[str, float, float]
+
+
+def _load_video_frames_cv2(path: str) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Load all video frames and their timestamps using OpenCV.
+
+    Args:
+        path: Path to video file.
+
+    Returns:
+        Tuple of (frames tensor in NCHW format, timestamps in seconds).
+    """
+    cap = cv2.VideoCapture(path)
+    if not cap.isOpened():
+        raise ValueError(f"Could not open video file: {path}")
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frames = []
+    timestamps = []
+    frame_idx = 0
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        # Convert BGR to RGB and to CHW format
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_tensor = torch.from_numpy(frame_rgb).permute(2, 0, 1)  # HWC -> CHW
+        frames.append(frame_tensor)
+        timestamps.append(frame_idx / fps if fps > 0 else 0.0)
+        frame_idx += 1
+
+    cap.release()
+
+    if not frames:
+        raise ValueError(f"No frames found in video: {path}")
+
+    return torch.stack(frames), torch.tensor(timestamps)
+
+
+def _load_audio_file(
+    path: str, target_sample_rate: int, num_channels: int = 1
+) -> torch.Tensor:
+    """Load audio from file with resampling and channel conversion.
+
+    Args:
+        path: Path to audio/video file.
+        target_sample_rate: Target sample rate for output.
+        num_channels: Number of output channels (1 for mono).
+
+    Returns:
+        Audio tensor of shape (num_channels, num_samples).
+    """
+    wav, sr = torchaudio.load(path)
+    if sr != target_sample_rate:
+        wav = torchaudio.functional.resample(wav, sr, target_sample_rate)
+    if num_channels == 1 and wav.size(0) > 1:
+        wav = wav.mean(0, keepdim=True)
+    return wav
 
 
 def batch_audio(
@@ -140,11 +198,10 @@ def load_video(
             feature_idx_to_wav_idx(torch.arange(size)) / audio_sampling_rate
         )
         if isinstance(video, str):
-            decoder = VideoDecoder(video, dimension_order="NCHW")
-            data = decoder.get_frames_in_range(0, len(decoder))
-            diffs = (audio_timestamps[None] - data.pts_seconds[:, None]).abs()
+            frames_data, pts_seconds = _load_video_frames_cv2(video)
+            diffs = (audio_timestamps[None] - pts_seconds[:, None]).abs()
             frame_idxs = diffs.argmin(dim=0)
-            frames = data.data[frame_idxs]
+            frames = frames_data[frame_idxs]
         else:
             assert video.size(1) == 3, (
                 f"Expected video tensor to be in NCHW format, but found {video.size(1)} channels"
@@ -199,8 +256,12 @@ class Processor:
         videos: List[str | torch.Tensor],
         masks: List[str | torch.Tensor],
     ) -> list[torch.Tensor]:
-        video = [VideoDecoder(v)[:] if isinstance(v, str) else v for v in videos]
-        video_mask = [VideoDecoder(v)[:] if isinstance(v, str) else v for v in masks]
+        video = [
+            _load_video_frames_cv2(v)[0] if isinstance(v, str) else v for v in videos
+        ]
+        video_mask = [
+            _load_video_frames_cv2(v)[0] if isinstance(v, str) else v for v in masks
+        ]
         return [v * m.eq(0) for v, m in zip(video, video_mask, strict=False)]
 
 
@@ -292,8 +353,7 @@ class SAMAudioJudgeProcessor(Processor):
         return torch.nn.functional.pad(wav, p1d, mode="reflect")
 
     def _load_audio(self, path: str):
-        ad = AudioDecoder(path, sample_rate=self.audio_sampling_rate, num_channels=1)
-        return ad.get_all_samples().data
+        return _load_audio_file(path, self.audio_sampling_rate, num_channels=1)
 
     def _process_audio(
         self,

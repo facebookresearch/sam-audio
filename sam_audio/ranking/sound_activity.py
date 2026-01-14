@@ -4,7 +4,7 @@ from io import BytesIO
 from typing import Tuple, Union
 
 import torch
-from torchcodec.encoders import AudioEncoder
+import torchaudio
 
 from ..model.config import SoundActivityRankerConfig
 from .ranker import Ranker
@@ -32,8 +32,10 @@ def get_peak_rms(audio, win_ms=250, hop_ms=100):
 
 def torch_tensor_to_pydub(wav: torch.Tensor, sample_rate: int):
     bytesio = BytesIO()
-    encoder = AudioEncoder(wav, sample_rate=sample_rate)
-    encoder.to_file_like(bytesio, format="wav")
+    # Ensure wav has correct shape for torchaudio.save (channels, samples)
+    if wav.ndim == 1:
+        wav = wav.unsqueeze(0)
+    torchaudio.save(bytesio, wav, sample_rate, format="wav")
     bytesio.seek(0)
     audio = pydub.AudioSegment.from_file(bytesio, format="wav")
     return audio
