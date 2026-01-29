@@ -119,8 +119,8 @@ class Batch:
             anchor_ids = pad_sequence(
                 ids, batch_first=True, padding_value=anchor_dict["<pad>"]
             )
-        self.anchor_ids = anchor_ids
-        self.anchor_alignment = anchor_alignment
+        self.anchor_ids = anchor_ids.to(self.audios.device)
+        self.anchor_alignment = anchor_alignment.to(self.audios.device)
         self.anchors = anchors
 
 
