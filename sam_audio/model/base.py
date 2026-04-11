@@ -1,4 +1,4 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved\n
+# Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved
 
 import json
 import os
@@ -21,10 +21,10 @@ class BaseModel(torch.nn.Module, ModelHubMixin):
         model_id: str,
         cache_dir: str,
         force_download: bool,
-        proxies: Optional[Dict],
-        resume_download: bool,
-        local_files_only: bool,
-        token: Union[str, bool, None],
+        proxies: Optional[Dict] = None,
+        resume_download: Optional[bool] = None,
+        local_files_only: bool = False,
+        token: Union[str, bool, None] = None,
         map_location: str = "cpu",
         strict: bool = True,
         revision: Optional[str] = None,
@@ -38,8 +38,6 @@ class BaseModel(torch.nn.Module, ModelHubMixin):
                 revision=cls.revision,
                 cache_dir=cache_dir,
                 force_download=force_download,
-                proxies=proxies,
-                resume_download=resume_download,
                 token=token,
                 local_files_only=local_files_only,
             )
