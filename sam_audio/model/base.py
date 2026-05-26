@@ -26,6 +26,7 @@ class BaseModel(torch.nn.Module, ModelHubMixin):
         local_files_only: bool,
         token: Union[str, bool, None],
         map_location: str = "cpu",
+        low_cpu_mem_usage: bool = False,
         strict: bool = True,
         revision: Optional[str] = None,
         **model_kwargs,
@@ -58,5 +59,21 @@ class BaseModel(torch.nn.Module, ModelHubMixin):
             weights_only=True,
             map_location=map_location,
         )
-        model.load_state_dict(state_dict, strict=strict)
+
+        if low_cpu_mem_usage:
+            model_state = model.state_dict()
+            for k, v in list(state_dict.items()):
+                if k in model_state:
+                    try:
+                        model_state[k].copy_(v)
+                    except Exception:
+                        # fallback to regular assignment if in-place copy fails
+                        model_state[k] = v
+                # free the tensor asap to keep peak memory low
+                del state_dict[k]
+            # load remaining keys (if any) normally
+            if len(state_dict) > 0:
+                model.load_state_dict(state_dict, strict=strict)
+        else:
+            model.load_state_dict(state_dict, strict=strict)
         return model
