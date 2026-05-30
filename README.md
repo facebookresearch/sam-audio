@@ -134,6 +134,43 @@ See the [eval](eval) directory for instructions and scripts to reproduce results
 
 See [contributing](CONTRIBUTING.md) and [code of conduct](CODE_OF_CONDUCT.md) for more information.
 
+## Docker
+
+Quick instructions to build and run SAM-Audio in Docker.
+
+- **Build (CPU or base image)**
+
+```bash
+# Build with default base image (PyTorch image with CUDA runtime).
+docker build -t sam-audio:latest .
+```
+
+- **Run (example)**
+
+```bash
+# Run interactively (mounts repo into container):
+docker run --gpus all -it --rm \
+   -v "$PWD":/workspace \
+   -e HF_TOKEN="${HF_TOKEN}" \
+   sam-audio:latest \
+   bash
+
+# Inside the container you can run the example:
+python eval/main.py
+```
+
+- **Using docker-compose**
+
+```bash
+# Start the service (compose will build if needed). Requires Docker with GPU support for `--gpus`.
+HF_TOKEN=your_hf_token docker-compose up --build
+```
+
+- **Notes**
+   - The provided `Dockerfile` uses the `pytorch/pytorch` base image by default (CUDA-enabled). To use a different base (CPU-only), set the `BASE_IMAGE` build-arg in the `docker build` command.
+   - You must authenticate with Hugging Face to download model checkpoints. Pass your token to the container via the `HF_TOKEN` env var or mount `~/.huggingface`.
+   - The image installs system dependencies like `ffmpeg` and `libsndfile`; if you need additional system packages, add them to the `Dockerfile`.
+
 ## License
 
 This project is licensed under the SAM License - see the [LICENSE](LICENSE) file for details.
