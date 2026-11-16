@@ -2,12 +2,31 @@
 
 import math
 from abc import ABCMeta, abstractmethod
-from typing import Union
+from typing import Callable, Union
 
 import dacvae
 import torch
 
 from sam_audio.model.config import DACVAEConfig
+
+
+def _run_with_cudnn(fn: Callable[[torch.Tensor], torch.Tensor], x: torch.Tensor):
+    """
+    Run a codec pass with cuDNN, which is several times faster than PyTorch's
+    fallback kernels for the codec's convolutions and the watermarker's LSTMs.
+    TF32 stays off to keep full FP32 precision. cuDNN's LSTM rejects sequences
+    of 65,536+ steps (inputs longer than ~7 minutes), so on a cuDNN error the
+    pass is re-run with cuDNN disabled, as before.
+    """
+    if x.is_cuda and torch.version.hip is None:
+        try:
+            with torch.backends.cudnn.flags(enabled=True, allow_tf32=False):
+                return fn(x)
+        except RuntimeError as e:
+            if "cudnn" not in str(e).lower():
+                raise
+    with torch.backends.cudnn.flags(enabled=False):
+        return fn(x)
 
 
 class Encoder(torch.nn.Module, metaclass=ABCMeta):
@@ -62,12 +81,14 @@ class DACVAEEncoder(Encoder):
         self.encoder = model.encoder
         self.quantizer = model.quantizer
 
+    def _encode(self, waveform: torch.Tensor) -> torch.Tensor:
+        z = self.encoder(self._pad(waveform))
+        mean, _ = self.quantizer.in_proj(z).chunk(2, dim=1)
+        return mean
+
     def forward(self, waveform: torch.Tensor) -> torch.Tensor:
-        with torch.no_grad(), torch.backends.cudnn.flags(enabled=False):
-            z = self.encoder(self._pad(waveform))
-            mean, _ = self.quantizer.in_proj(z).chunk(2, dim=1)
-            encoded_frames = mean
-        return encoded_frames
+        with torch.no_grad():
+            return _run_with_cudnn(self._encode, waveform)
 
     def _pad(self, wavs):
         length = wavs.size(-1)
@@ -83,10 +104,12 @@ class DACVAE(DACVAEEncoder, Codec):
         super()._setup_model(model)
         self.decoder = model.decoder
 
+    def _decode(self, encoded_frames: torch.Tensor) -> torch.Tensor:
+        emb = self.quantizer.out_proj(encoded_frames)
+        return self.decoder(emb)
+
     def decode(self, encoded_frames: torch.Tensor) -> torch.Tensor:
-        with torch.backends.cudnn.flags(enabled=False):
-            emb = self.quantizer.out_proj(encoded_frames)
-            return self.decoder(emb)
+        return _run_with_cudnn(self._decode, encoded_frames)
 
     def feature_idx_to_wav_idx(self, feature_idx, sample_rate=None):
         if sample_rate is None:
